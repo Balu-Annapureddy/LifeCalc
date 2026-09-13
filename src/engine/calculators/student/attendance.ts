@@ -14,6 +14,18 @@ export const attendanceInputSchema = z.object({
 export type AttendanceInput = z.infer<typeof attendanceInputSchema>;
 
 export function calculateAttendancePure(present: number, total: number, target: number) {
+  if (total <= 0) {
+    return {
+      currentPercentage: 0,
+      isEligible: false,
+      classesNeeded: 0,
+      canBunk: 0,
+      totalClasses: 0,
+      presentClasses: 0,
+      targetPercentage: target,
+    };
+  }
+
   const currentPercentage = (present / total) * 100;
   const isEligible = currentPercentage >= target;
 

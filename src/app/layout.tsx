@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   keywords: ['calculator', 'emi calculator', 'sip calculator', 'salary calculator', 'cgpa to percentage', 'can i afford this', 'fuel cost'],
   authors: [{ name: 'LifeCalc Team' }],
   metadataBase: new URL('https://lifecalc.in'),
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/icon-192.png',
+    apple: '/icon-192.png',
+  },
   openGraph: {
     type: 'website',
     locale: 'en_IN',
@@ -45,6 +50,17 @@ export default function RootLayout({
         </div>
 
         <Footer />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').catch(function() {});
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

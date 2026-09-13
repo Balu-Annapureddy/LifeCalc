@@ -62,8 +62,8 @@ export function calculateEmiPure(principal: number, annualRate: number, tenureYe
     emi: Math.round(emi),
     totalInterest: Math.round(totalInterest),
     totalPayment: Math.round(totalPayment),
-    principalRatio: (principal / totalPayment) * 100,
-    interestRatio: (totalInterest / totalPayment) * 100,
+    principalRatio: totalPayment > 0 ? (principal / totalPayment) * 100 : 100,
+    interestRatio: totalPayment > 0 ? (totalInterest / totalPayment) * 100 : 0,
     months: n,
     scheduleRows,
   };

@@ -59,9 +59,9 @@ describe('Tamper-Proof Guest Quota Suite', () => {
     });
 
     const res16 = await POST(req16);
+    expect(res16.status).toBe(429);
     const data16 = await res16.json();
-    // Result is STILL returned for display!
-    expect(data16.result).toBeDefined();
+    expect(data16.error).toBe('Guest calculation limit reached');
     expect(data16.quotaReached).toBe(true);
     expect(data16.calculationsRemaining).toBe(0);
   });

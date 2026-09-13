@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// Server-side safe share storage (in production, backed by postgres `shared_calculations` table)
-const shareStore = new Map<string, { calculatorId: string; inputs: Record<string, any>; createdAt: number }>();
+import { saveSharedCalculation, getSharedCalculation } from '@/lib/share';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,13 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing calculatorId or inputs' }, { status: 400 });
     }
 
-    // Generate a short URL-safe ID
-    const shareId = Math.random().toString(36).substring(2, 10);
-    shareStore.set(shareId, {
-      calculatorId,
-      inputs,
-      createdAt: Date.now(),
-    });
+    const shareId = saveSharedCalculation(calculatorId, inputs);
 
     return NextResponse.json({
       shareId,
@@ -33,10 +25,14 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
 
-  if (!id || !shareStore.has(id)) {
+  if (!id) {
+    return NextResponse.json({ error: 'Missing id query parameter' }, { status: 400 });
+  }
+
+  const data = getSharedCalculation(id);
+  if (!data) {
     return NextResponse.json({ error: 'Share link not found or expired' }, { status: 404 });
   }
 
-  const data = shareStore.get(id);
   return NextResponse.json(data);
 }

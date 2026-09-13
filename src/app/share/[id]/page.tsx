@@ -2,8 +2,9 @@ import React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { registry } from '@/engine/registry';
+import { getSharedCalculation } from '@/lib/share';
 import { CalculatorRunner } from '@/components/calculator/CalculatorRunner';
-import { Share2, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { Share2, ArrowLeft, ShieldCheck, AlertCircle } from 'lucide-react';
 
 interface SharePageProps {
   params: {
@@ -13,12 +14,14 @@ interface SharePageProps {
 }
 
 export default function SharePage({ params, searchParams }: SharePageProps) {
-  // If inputs are passed via query parameters or default to emi
-  const calculatorId = searchParams?.calc || 'emi';
+  const shared = getSharedCalculation(params.id);
+  const calculatorId = shared?.calculatorId || searchParams?.calc || 'emi';
   const calc = registry.getById(calculatorId) || registry.getAll()[0];
 
+  const initialInputs = shared ? shared.inputs : searchParams;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl mx-auto py-4">
       <div className="flex items-center justify-between">
         <Link
           href={`/calculators/${calc.category}/${calc.slug}`}
@@ -40,20 +43,22 @@ export default function SharePage({ params, searchParams }: SharePageProps) {
               Shared Calculation: {calc.name}
             </h2>
             <p className="text-xs text-slate-600">
-              This calculation was shared with you. You can adjust values below to test your own scenarios.
+              {shared
+                ? 'This scenario was saved and shared with you. You can inspect the verified results or adjust values below.'
+                : 'Shared parameter preset loaded. You can tweak values and simulate custom scenarios.'}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 shrink-0">
           <ShieldCheck className="w-3.5 h-3.5" />
-          <span>Verified Formula</span>
+          <span>Verified Engine Result</span>
         </div>
       </div>
 
       {/* Calculator Runner */}
       <CalculatorRunner
         calculatorId={calc.id}
-        initialInputs={searchParams}
+        initialInputs={initialInputs}
       />
     </div>
   );

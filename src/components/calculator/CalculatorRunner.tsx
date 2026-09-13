@@ -19,6 +19,7 @@ import {
   Sparkles,
   Lock,
   ArrowRight,
+  Bookmark,
 } from 'lucide-react';
 import { formatCurrency } from '@/engine/formatters';
 
@@ -74,12 +75,34 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
     setInputs(prev => ({ ...prev, [id]: value }));
   };
 
+  const [savedScenario, setSavedScenario] = useState(false);
+
   const handleReset = () => {
     setInputs(defaultValues);
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            calculatorId: calculator.id,
+            inputs,
+          }),
+        });
+        const data = await res.json();
+        if (data.shareUrl) {
+          const fullUrl = `${window.location.origin}${data.shareUrl}`;
+          await navigator.clipboard.writeText(fullUrl);
+          setCopiedShare(true);
+          setTimeout(() => setCopiedShare(false), 2500);
+          return;
+        }
+      } catch {}
+
+      // Fallback: encode query parameters
       const params = new URLSearchParams();
       Object.entries(inputs).forEach(([k, v]) => params.set(k, String(v)));
       const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
@@ -89,7 +112,40 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
     }
   };
 
-  // Synchronize execution with server quota tracking
+  const handleSaveScenario = async () => {
+    try {
+      const payload = {
+        name: `${calculator.name} Scenario`,
+        calculatorId: calculator.id,
+        primaryResult: currentResult.primary.formattedValue,
+        notes: currentResult.summaryExplanation,
+        inputs,
+      };
+
+      // Save to server API
+      await fetch('/api/saved', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      // Save to localStorage as backup
+      const existing = JSON.parse(localStorage.getItem('lifecalc_saved') || '[]');
+      localStorage.setItem('lifecalc_saved', JSON.stringify([
+        {
+          id: `save_${Date.now()}`,
+          ...payload,
+          updatedAt: 'Just now',
+        },
+        ...existing,
+      ]));
+
+      setSavedScenario(true);
+      setTimeout(() => setSavedScenario(false), 2500);
+    } catch {}
+  };
+
+  // Synchronize execution with server quota tracking & history
   const handleServerExecution = async () => {
     try {
       const res = await fetch('/api/calculate', {
@@ -107,6 +163,32 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
       if (data.calculationsRemaining !== undefined) {
         setRemainingQuota(data.calculationsRemaining);
       }
+
+      // Record to history
+      fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          calculatorId: calculator.id,
+          summary: currentResult.summaryExplanation,
+          primaryValue: currentResult.primary.formattedValue,
+          inputs,
+        }),
+      }).catch(() => {});
+
+      // Sync local history
+      const localHistory = JSON.parse(localStorage.getItem('lifecalc_history') || '[]');
+      localStorage.setItem('lifecalc_history', JSON.stringify([
+        {
+          id: `hist_${Date.now()}`,
+          calculatorId: calculator.id,
+          summary: currentResult.summaryExplanation,
+          primaryValue: currentResult.primary.formattedValue,
+          timestamp: 'Just now',
+          inputs,
+        },
+        ...localHistory,
+      ].slice(0, 50)));
     } catch {
       // Fallback: client calculation already succeeded
     }
@@ -240,15 +322,25 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
             </div>
           )}
 
-          {/* Quick Actions (Share & Feedback) */}
-          <div className="flex items-center justify-between pt-1 text-xs text-slate-500">
-            <button
-              onClick={handleShare}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              <span>{copiedShare ? 'Link Copied!' : 'Share Calculation'}</span>
-            </button>
+          {/* Quick Actions (Share, Bookmark, Feedback) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleShare}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>{copiedShare ? 'Link Copied!' : 'Share'}</span>
+              </button>
+
+              <button
+                onClick={handleSaveScenario}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors"
+              >
+                <Bookmark className="w-3.5 h-3.5 text-blue-600" />
+                <span>{savedScenario ? 'Saved!' : 'Save Scenario'}</span>
+              </button>
+            </div>
 
             <div className="flex items-center gap-2">
               <span>Was this helpful?</span>

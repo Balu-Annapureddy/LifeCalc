@@ -79,6 +79,8 @@ npm run build
 
 ### 🛍️ Buying & Decisions
 - **Can I Afford This?** (`/calculators/buying/can-i-afford-this`): Objective financial risk assessment based on debt-to-income and liquid runway.
+- **EMI vs Cash** (`/calculators/buying/emi-vs-cash`): Financing comparison factoring in upfront cash discounts and investment opportunity returns.
+- **Total Ownership Cost** (`/calculators/buying/total-ownership-cost`): 5-to-10 year car and motorcycle true ownership cost covering insurance, fuel, maintenance, and resale salvage.
 
 ### ⏰ Time & Dates
 - **Age Calculator** (`/calculators/time/age`): Exact years, months, days, total days lived, and next birthday countdown.

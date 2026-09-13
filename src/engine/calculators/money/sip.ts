@@ -12,35 +12,54 @@ export type SipInput = z.infer<typeof sipInputSchema>;
 
 export function calculateSipPure(monthlyInvestment: number, expectedReturnRate: number, years: number) {
   const n = Math.round(years * 12);
-  const i = expectedReturnRate / 12 / 100;
-  
-  // Future value of an annuity due (payments at beginning of period)
-  const factor = Math.pow(1 + i, n);
-  const futureValue = monthlyInvestment * ((factor - 1) / i) * (1 + i);
   const totalInvested = monthlyInvestment * n;
-  const wealthGain = futureValue - totalInvested;
+  let futureValue = totalInvested;
+  let wealthGain = 0;
 
-  // Year-by-year growth
   const yearlyRows = [];
-  for (let y = 1; y <= years; y++) {
-    const months = y * 12;
-    const yFactor = Math.pow(1 + i, months);
-    const yFv = monthlyInvestment * ((yFactor - 1) / i) * (1 + i);
-    const yInvested = monthlyInvestment * months;
-    yearlyRows.push({
-      year: `Year ${y}`,
-      invested: formatCurrency(Math.round(yInvested)),
-      wealthGained: formatCurrency(Math.round(yFv - yInvested)),
-      totalValue: formatCurrency(Math.round(yFv)),
-    });
+
+  if (expectedReturnRate <= 0) {
+    futureValue = totalInvested;
+    wealthGain = 0;
+
+    for (let y = 1; y <= years; y++) {
+      const months = y * 12;
+      const yInvested = monthlyInvestment * months;
+      yearlyRows.push({
+        year: `Year ${y}`,
+        invested: formatCurrency(Math.round(yInvested)),
+        wealthGained: formatCurrency(0),
+        totalValue: formatCurrency(Math.round(yInvested)),
+      });
+    }
+  } else {
+    const i = expectedReturnRate / 12 / 100;
+    // Future value of an annuity due (payments at beginning of period)
+    const factor = Math.pow(1 + i, n);
+    futureValue = monthlyInvestment * ((factor - 1) / i) * (1 + i);
+    wealthGain = futureValue - totalInvested;
+
+    // Year-by-year growth
+    for (let y = 1; y <= years; y++) {
+      const months = y * 12;
+      const yFactor = Math.pow(1 + i, months);
+      const yFv = monthlyInvestment * ((yFactor - 1) / i) * (1 + i);
+      const yInvested = monthlyInvestment * months;
+      yearlyRows.push({
+        year: `Year ${y}`,
+        invested: formatCurrency(Math.round(yInvested)),
+        wealthGained: formatCurrency(Math.round(yFv - yInvested)),
+        totalValue: formatCurrency(Math.round(yFv)),
+      });
+    }
   }
 
   return {
     futureValue: Math.round(futureValue),
     totalInvested: Math.round(totalInvested),
     wealthGain: Math.round(wealthGain),
-    wealthRatio: (wealthGain / futureValue) * 100,
-    investedRatio: (totalInvested / futureValue) * 100,
+    wealthRatio: futureValue > 0 ? (wealthGain / futureValue) * 100 : 0,
+    investedRatio: futureValue > 0 ? (totalInvested / futureValue) * 100 : 100,
     yearlyRows,
   };
 }

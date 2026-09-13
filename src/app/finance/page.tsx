@@ -25,7 +25,7 @@ interface ExpenseEntry {
   note: string;
 }
 
-const DEFAULT_ENTRIES: ExpenseEntry[] = [
+const DEMO_ENTRIES_TEMPLATE: ExpenseEntry[] = [
   { id: '1', category: 'Salary', amount: 85000, type: 'income', date: '2026-09-01', note: 'Monthly take-home credit' },
   { id: '2', category: 'Rent', amount: 24000, type: 'expense', date: '2026-09-02', note: '2BHK Apartment Rent' },
   { id: '3', category: 'Food & Groceries', amount: 12500, type: 'expense', date: '2026-09-05', note: 'Supermarket & dining' },
@@ -36,11 +36,38 @@ const DEFAULT_ENTRIES: ExpenseEntry[] = [
 ];
 
 export default function FinancePage() {
-  const [entries, setEntries] = useState<ExpenseEntry[]>(DEFAULT_ENTRIES);
+  const [entries, setEntries] = useState<ExpenseEntry[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [newCategory, setNewCategory] = useState('Food & Groceries');
   const [newAmount, setNewAmount] = useState('');
   const [newNote, setNewNote] = useState('');
   const [newType, setNewType] = useState<'expense' | 'income'>('expense');
+
+  // Load from localStorage on mount
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('lifecalc_finance_entries');
+      if (saved) {
+        setEntries(JSON.parse(saved));
+      }
+    } catch {}
+    setIsLoaded(true);
+  }, []);
+
+  const persistEntries = (newItems: ExpenseEntry[]) => {
+    setEntries(newItems);
+    try {
+      localStorage.setItem('lifecalc_finance_entries', JSON.stringify(newItems));
+    } catch {}
+  };
+
+  const handleLoadDemoTemplate = () => {
+    persistEntries(DEMO_ENTRIES_TEMPLATE);
+  };
+
+  const handleClearEntries = () => {
+    persistEntries([]);
+  };
 
   // Deterministic financial metrics
   const { totalIncome, totalExpenses, netSavings, savingsRate, categoryTotals } = useMemo(() => {
@@ -85,7 +112,7 @@ export default function FinancePage() {
       note: newNote || newCategory,
     };
 
-    setEntries(prev => [entry, ...prev]);
+    persistEntries([entry, ...entries]);
     setNewAmount('');
     setNewNote('');
   };
@@ -112,9 +139,26 @@ export default function FinancePage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
-          <ShieldCheck className="w-4 h-4" />
-          <span>Private & Client-Encrypted</span>
+        <div className="flex items-center gap-2">
+          {entries.length === 0 ? (
+            <button
+              onClick={handleLoadDemoTemplate}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              Load Sample Budget
+            </button>
+          ) : (
+            <button
+              onClick={handleClearEntries}
+              className="text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              Clear Ledger
+            </button>
+          )}
+          <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+            <ShieldCheck className="w-4 h-4" />
+            <span>Private & Stored Locally</span>
+          </div>
         </div>
       </div>
 

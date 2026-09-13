@@ -11,20 +11,43 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRemaining = 15 }) => {
   const [remaining, setRemaining] = useState<number>(initialRemaining);
   const [isGuest, setIsGuest] = useState(true);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    // Fetch live session quota on mount
-    fetch('/api/calculate')
+    // Check auth status
+    fetch('/api/auth/me')
       .then(res => res.json())
       .then(data => {
-        if (data.isGuest !== undefined) {
-          setIsGuest(data.isGuest);
-          setRemaining(data.calculationsRemaining);
+        if (data.authenticated && data.user) {
+          setCurrentUser(data.user);
+          setIsGuest(false);
+        } else {
+          // If not authed, fetch guest quota
+          fetch('/api/calculate')
+            .then(res => res.json())
+            .then(calcData => {
+              if (calcData.isGuest !== undefined) {
+                setIsGuest(calcData.isGuest);
+                setRemaining(calcData.calculationsRemaining);
+              }
+            })
+            .catch(() => {});
         }
       })
       .catch(() => {});
   }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/signout', { method: 'POST' });
+      setCurrentUser(null);
+      setIsGuest(true);
+      window.location.reload();
+    } catch {
+      window.location.reload();
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/90 backdrop-blur-md">
@@ -90,21 +113,51 @@ export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRe
             <Search className="w-4 h-4" />
           </Link>
 
-          {/* Auth CTA */}
-          <Link
-            href="/signin"
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            <User className="w-3.5 h-3.5" />
-            Sign in
-          </Link>
+          {/* Auth CTA or User Menu */}
+          {currentUser ? (
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-2">
+                <Link
+                  href="/saved"
+                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Saved
+                </Link>
+                <Link
+                  href="/history"
+                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  History
+                </Link>
+                <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                  {currentUser.name || currentUser.email.split('@')[0]}
+                </span>
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <>
+              <Link
+                href="/signin"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <User className="w-3.5 h-3.5" />
+                Sign in
+              </Link>
 
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors"
-          >
-            Create free account
-          </Link>
+              <Link
+                href="/signup"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors"
+              >
+                Create free account
+              </Link>
+            </>
+          )}
 
           {/* Mobile menu toggle */}
           <button

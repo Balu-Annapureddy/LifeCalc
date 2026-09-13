@@ -47,7 +47,11 @@ export async function POST(req: NextRequest) {
 
     // 3. Check Authentication vs Guest Quota
     // If user has auth token/session, they get unlimited calculations
-    const isAuthed = Boolean(authToken || req.cookies.get('sb-access-token')?.value);
+    const isAuthed = Boolean(
+      authToken ||
+      req.cookies.get('lifecalc_auth_session')?.value ||
+      req.cookies.get('sb-access-token')?.value
+    );
 
     if (isAuthed) {
       return NextResponse.json({
@@ -71,6 +75,32 @@ export async function POST(req: NextRequest) {
     cleanupExpiredSessions();
 
     const currentSession = sessionQuotaStore.get(sessionId) || { count: 0, lastUsed: Date.now() };
+
+    // Requirement 63: 15th calculation works; 16th calculation attempt is blocked
+    if (currentSession.count >= GUEST_MAX_CALCULATIONS) {
+      const blockedResponse = NextResponse.json(
+        {
+          error: 'Guest calculation limit reached',
+          message: "You've used your 15 free calculations. Sign in for unlimited free calculations and save your progress.",
+          isGuest: true,
+          calculationsUsed: currentSession.count,
+          calculationsRemaining: 0,
+          quotaReached: true,
+        },
+        { status: 429 }
+      );
+      if (isNewSession) {
+        blockedResponse.cookies.set('lifecalc_guest_sid', sessionId, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+          maxAge: 30 * 24 * 60 * 60,
+          path: '/',
+        });
+      }
+      return blockedResponse;
+    }
+
     const newCount = currentSession.count + 1;
     currentSession.count = newCount;
     currentSession.lastUsed = Date.now();
@@ -110,7 +140,10 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   // Query current guest quota status without incrementing count
   const sessionId = req.cookies.get('lifecalc_guest_sid')?.value;
-  const isAuthed = Boolean(req.cookies.get('sb-access-token')?.value);
+  const isAuthed = Boolean(
+    req.cookies.get('lifecalc_auth_session')?.value ||
+    req.cookies.get('sb-access-token')?.value
+  );
 
   if (isAuthed) {
     return NextResponse.json({

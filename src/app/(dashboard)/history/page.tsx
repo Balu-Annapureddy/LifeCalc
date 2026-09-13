@@ -14,42 +14,50 @@ interface HistoryEntry {
   inputs: Record<string, any>;
 }
 
-const DEFAULT_MOCK_HISTORY: HistoryEntry[] = [
-  {
-    id: 'hist_1',
-    calculatorId: 'emi',
-    summary: '₹10,00,000 @ 9% for 5 years',
-    primaryValue: '₹20,758 / mo',
-    timestamp: 'Today, 10:15 AM',
-    inputs: { principal: 1000000, annualRate: 9, tenureYears: 5 },
-  },
-  {
-    id: 'hist_2',
-    calculatorId: 'sip',
-    summary: '₹5,000/month @ 12% for 20 years',
-    primaryValue: '₹49,95,740',
-    timestamp: 'Yesterday, 4:30 PM',
-    inputs: { monthlyInvestment: 5000, expectedReturnRate: 12, investmentPeriodYears: 20 },
-  },
-  {
-    id: 'hist_3',
-    calculatorId: 'ctc-to-take-home',
-    summary: '₹12,00,000 CTC (New Tax Regime)',
-    primaryValue: '₹75,650 / mo',
-    timestamp: 'Sep 10, 2026',
-    inputs: { annualCtc: 1200000, regime: 'new', bonusPercent: 10 },
-  },
-];
-
 export default function HistoryPage() {
-  const [history, setHistory] = useState<HistoryEntry[]>(DEFAULT_MOCK_HISTORY);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleDelete = (id: string) => {
-    setHistory(prev => prev.filter(item => item.id !== id));
+  useEffect(() => {
+    fetch('/api/history')
+      .then(res => res.json())
+      .then(data => {
+        if (data.items) {
+          setHistory(data.items);
+        } else {
+          // fallback to localStorage
+          const local = localStorage.getItem('lifecalc_history');
+          if (local) {
+            try { setHistory(JSON.parse(local)); } catch {}
+          }
+        }
+      })
+      .catch(() => {
+        const local = localStorage.getItem('lifecalc_history');
+        if (local) {
+          try { setHistory(JSON.parse(local)); } catch {}
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    setHistory(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      try { localStorage.setItem('lifecalc_history', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    try {
+      await fetch(`/api/history?id=${id}`, { method: 'DELETE' });
+    } catch {}
   };
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     setHistory([]);
+    try { localStorage.removeItem('lifecalc_history'); } catch {}
+    try {
+      await fetch('/api/history', { method: 'DELETE' });
+    } catch {}
   };
 
   return (
