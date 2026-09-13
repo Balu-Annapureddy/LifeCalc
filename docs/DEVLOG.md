@@ -254,3 +254,16 @@
 - `npm test`: 55 passed across 7 test suites (100% pass rate).
 - `npm run build`: Compiled with 42 static & dynamic routes.
 - `npm run test:e2e`: 4/4 Playwright browser tests passed in Chromium.
+
+## [Entry 009] — 2026-09-13: CI Test Worker Isolation & Deployment Gate
+
+### What Was Audited & Resolved
+1. **GitHub CI Vitest Worker Isolation (`vitest.config.ts`, `src/tests/quota-concurrency.test.ts`)**:
+   - Diagnosed GitHub Actions workflow failure on commit `2de51ed`: Vitest default multi-threaded worker parallelism caused `_resetDatabaseForTesting()` in `quota-concurrency.test.ts` to race with authentication session checks in `e2e-user-journeys.test.ts` across parallel worker processes sharing local JSON persistence.
+   - Configured `fileParallelism: false` in `vitest.config.ts` to ensure clean, isolated sequential file execution in local/CI test mode.
+   - Removed destructive whole-database reset call from `quota-concurrency.test.ts` since the test uses cryptographically unique guest IDs.
+2. **Pre-flight Automated Suite Verification**:
+   - `tsc --noEmit`: 0 errors.
+   - `vitest run`: 55/55 passed across 7 test files.
+   - `next build`: 42 routes compiled cleanly.
+   - `playwright test`: 4/4 E2E browser tests passed.

@@ -4,12 +4,10 @@ import {
   recordFailedLogin,
   checkLoginRateLimit,
   getRateLimitRecord,
-  _resetDatabaseForTesting,
 } from '@/lib/db';
 
 describe('Authoritative Atomic Guest Quota & Rate Limit Concurrency Suite', () => {
   it('strictly enforces calculation limit <= 15 under 10 concurrent requests at boundary 14', async () => {
-    _resetDatabaseForTesting();
     const guestId = `concurrent_guest_${Date.now()}`;
 
     // 1. Advance quota to 14
