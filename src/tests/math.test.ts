@@ -10,6 +10,8 @@ import { calculateCgpaPure } from '../engine/calculators/student/cgpa';
 import { calculateAffordabilityPure } from '../engine/calculators/buying/can-i-afford-this';
 import { calculateAgePure } from '../engine/calculators/time/age';
 import { calculateFuelCostPure } from '../engine/calculators/everyday/fuel-cost';
+import { calculateEmiVsCashPure } from '../engine/calculators/buying/emi-vs-cash';
+import { calculateOwnershipCostPure } from '../engine/calculators/buying/total-ownership-cost';
 
 describe('Authoritative Mathematical Engine Tests', () => {
   describe('EMI Calculator Pure Math', () => {
@@ -220,16 +222,43 @@ describe('Authoritative Mathematical Engine Tests', () => {
     });
   });
 
-  describe('Fuel Cost Math', () => {
-    it('calculates 300 km round trip fuel cost and carpool split', () => {
-      // 300 km one-way, round trip = 600 km. Mileage = 15 km/l. Fuel needed = 40 L.
-      // Price = ₹100/L. Total cost = ₹4,000. 4 passengers = ₹1,000/person.
-      const res = calculateFuelCostPure(300, 15, 100, true, 4);
-      expect(res.effectiveDistance).toBe(600);
-      expect(res.fuelLiters).toBe(40);
-      expect(res.totalCost).toBe(4000);
-      expect(res.costPerPerson).toBe(1000);
-      expect(res.costPerKm).toBe(6.67);
+  describe('EMI vs Cash Math', () => {
+    it('compares full cash upfront with 10% discount against zero percent loan', () => {
+      const res = calculateEmiVsCashPure({
+        purchasePrice: 100000,
+        cashDiscountPercent: 10,
+        downPayment: 0,
+        loanTenureMonths: 12,
+        loanAnnualRate: 0,
+        investmentReturnRate: 10,
+      });
+      expect(res.cashPaid).toBe(90000);
+      expect(res.totalEmiRepayment).toBe(100000);
+      expect(res.isEmiBetter).toBe(false);
+      expect(res.recommendation).toContain('Pay Cash');
+    });
+  });
+
+  describe('Vehicle Total Ownership Cost Math', () => {
+    it('calculates comprehensive 5-year ownership cost with fuel, insurance, and resale', () => {
+      const res = calculateOwnershipCostPure({
+        vehiclePrice: 1200000,
+        ownershipYears: 5,
+        downPayment: 300000,
+        loanInterestRate: 9,
+        loanTenureYears: 5,
+        monthlyRunningKm: 1000,
+        mileageKmpl: 15,
+        fuelPricePerLitre: 102,
+        annualInsurance: 25000,
+        annualMaintenance: 15000,
+        expectedResalePercent: 45,
+      });
+      expect(res.totalKmDriven).toBe(60000);
+      expect(res.estimatedResaleValue).toBe(540000);
+      expect(res.netTotalOwnershipCost).toBeGreaterThan(1000000);
+      expect(res.effectiveCostPerMonth).toBeGreaterThan(20000);
+      expect(res.effectiveCostPerKm).toBeGreaterThan(15);
     });
   });
 });

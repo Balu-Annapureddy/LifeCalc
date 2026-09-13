@@ -15,6 +15,8 @@ describe('Calculator Registry Suite', () => {
     expect(ids).toContain('cgpa');
     expect(ids).toContain('attendance');
     expect(ids).toContain('can-i-afford-this');
+    expect(ids).toContain('emi-vs-cash');
+    expect(ids).toContain('total-ownership-cost');
     expect(ids).toContain('age');
     expect(ids).toContain('fuel-cost');
   });

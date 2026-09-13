@@ -68,3 +68,31 @@
 - `npm run typecheck`: 0 TypeScript errors.
 - `npm test`: 33 passed (100% pass rate).
 - `npm run build`: Next.js production bundle compiled cleanly with 29 prerendered static pages.
+
+---
+
+## [Entry 003] — 2026-09-13: Advanced Decision Tools, Share Route, Personal Finance & AI Grounding (Phase C & D)
+
+### What Was Implemented
+- **Expanded Decision Engines**:
+  - `buying/emi-vs-cash.ts`: Objective comparison between paying upfront cash (with seller cash discounts) vs financing via EMI, factoring in opportunity returns earned by retaining liquid capital in investments over the tenure.
+  - `buying/total-ownership-cost.ts`: 5-to-10 year car and motorcycle true ownership cost calculator factoring on-road pricing, loan interest, annual insurance, fuel/charging, periodic maintenance, and salvage resale value.
+- **Reproducible Calculation Sharing (`/share/[id]`)**:
+  - API endpoint (`/api/share`) storing and retrieving calculation state.
+  - Dynamic page (`src/app/share/[id]/page.tsx`) allowing users to safely share calculations without exposing private personal credentials.
+- **User Dashboards (`/history` and `/saved`)**:
+  - Calculation history view with instant scenario reopening and clean deletion.
+  - Bookmarked saved calculations with custom titles (e.g. "My SBI Home Loan", "Retirement SIP").
+- **Personal Finance Module (`src/app/finance/page.tsx`)**:
+  - Income and expenditure tracking across 10 categories (Rent, Food, Transport, Shopping, Utilities, Subscriptions, Education, Healthcare, Entertainment, Other).
+  - Deterministic metrics: Total Income, Total Expenses, Net Savings, and Savings Rate.
+  - Automated optimization recommendations (e.g. identifying largest discretionary expense and calculating compounded annual savings if reduced by ₹2,000/month).
+- **Authoritative AI Explanation Layer (`src/app/api/ai/explain/route.ts`)**:
+  - Strict grounding architecture: receives authoritative facts from the deterministic calculation engine.
+  - Generates clear, contextual financial advice without independently calculating or contradicting mathematical formulas.
+
+### Verification Status
+- `npm run typecheck`: 0 errors.
+- `npm test`: 34 passed across 4 test suites.
+- `npm run build`: Next.js production bundle compiled with 36 prerendered pages and zero errors.
+

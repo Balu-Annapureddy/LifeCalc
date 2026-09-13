@@ -8,6 +8,8 @@ import { gstCalculator } from './calculators/money/gst';
 import { cgpaCalculator } from './calculators/student/cgpa';
 import { attendanceCalculator } from './calculators/student/attendance';
 import { canIAffordThisCalculator } from './calculators/buying/can-i-afford-this';
+import { emiVsCashCalculator } from './calculators/buying/emi-vs-cash';
+import { totalOwnershipCostCalculator } from './calculators/buying/total-ownership-cost';
 import { ageCalculator } from './calculators/time/age';
 import { fuelCalculator } from './calculators/everyday/fuel-cost';
 
@@ -25,6 +27,8 @@ export class CalculatorRegistry {
     this.register(cgpaCalculator);
     this.register(attendanceCalculator);
     this.register(canIAffordThisCalculator);
+    this.register(emiVsCashCalculator);
+    this.register(totalOwnershipCostCalculator);
     this.register(ageCalculator);
     this.register(fuelCalculator);
   }
