@@ -214,8 +214,45 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
   const normalized = email.toLowerCase().trim();
   const supabase = getActiveSupabase();
   if (supabase) {
-    const { data, error } = await supabase.from('users').select('*').eq('email', normalized).maybeSingle();
-    if (error) throw new Error(`[DB ERROR] findUserByEmail: ${error.message}`);
+    let hostname = 'unknown';
+    try {
+      if (config.supabaseUrl) hostname = new URL(config.supabaseUrl).hostname;
+    } catch {
+      hostname = 'invalid_url';
+    }
+
+    console.log('[SUPABASE DIAGNOSTIC: findUserByEmail START]', {
+      hostname,
+      hasServiceRoleKey: Boolean(config.supabaseServiceRoleKey),
+      keyLength: config.supabaseServiceRoleKey?.length ?? 0,
+    });
+
+    const startTime = Date.now();
+    const { data, error, status, statusText } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', normalized)
+      .maybeSingle();
+    const elapsedMs = Date.now() - startTime;
+
+    if (error) {
+      console.error('[SUPABASE DIAGNOSTIC: findUserByEmail ERROR]', {
+        hostname,
+        elapsedMs,
+        status,
+        statusText,
+        errorMessage: error.message,
+        errorCode: error.code,
+      });
+      throw new Error(`[DB ERROR] findUserByEmail: ${error.message}`);
+    }
+
+    console.log('[SUPABASE DIAGNOSTIC: findUserByEmail SUCCESS]', {
+      hostname,
+      elapsedMs,
+      found: Boolean(data),
+    });
+
     if (!data) return null;
     return {
       id: data.id,
