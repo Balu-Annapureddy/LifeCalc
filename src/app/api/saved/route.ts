@@ -7,18 +7,26 @@ import {
   deleteSavedScenarioById,
 } from '@/lib/db';
 
-async function getEffectiveUserId(req: NextRequest): Promise<string> {
-  const user = await getUserFromRequest(req);
-  if (user) return user.id;
-  const { guestId } = getOrCreateGuestId(req);
-  return guestId;
-}
-
 export async function GET(req: NextRequest) {
   try {
-    const userId = await getEffectiveUserId(req);
+    const user = await getUserFromRequest(req);
+    const { guestId, signedCookie, isNew } = getOrCreateGuestId(req);
+    const userId = user ? user.id : guestId;
+
     const items = await getSavedScenariosByUserId(userId);
-    return NextResponse.json({ items });
+    const response = NextResponse.json({ items });
+
+    if (isNew) {
+      response.cookies.set('lifecalc_guest_sid', signedCookie, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 30 * 24 * 60 * 60,
+        path: '/',
+      });
+    }
+
+    return response;
   } catch (err: any) {
     return NextResponse.json({ error: 'Failed to retrieve saved scenarios' }, { status: 500 });
   }
@@ -26,7 +34,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = await getEffectiveUserId(req);
+    const user = await getUserFromRequest(req);
+    const { guestId, signedCookie, isNew } = getOrCreateGuestId(req);
+    const userId = user ? user.id : guestId;
+
     const body = await req.json();
     const { name, calculatorId, primaryResult, notes, inputs } = body;
 
@@ -43,7 +54,19 @@ export async function POST(req: NextRequest) {
       inputs,
     });
 
-    return NextResponse.json({ success: true, item: newItem });
+    const response = NextResponse.json({ success: true, item: newItem });
+
+    if (isNew) {
+      response.cookies.set('lifecalc_guest_sid', signedCookie, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 30 * 24 * 60 * 60,
+        path: '/',
+      });
+    }
+
+    return response;
   } catch (err: any) {
     return NextResponse.json({ error: 'Failed to save scenario' }, { status: 500 });
   }
@@ -51,7 +74,10 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const userId = await getEffectiveUserId(req);
+    const user = await getUserFromRequest(req);
+    const { guestId } = getOrCreateGuestId(req);
+    const userId = user ? user.id : guestId;
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST as calculatePost } from '@/app/api/calculate/route';
 import { POST as signupPost } from '@/app/api/auth/signup/route';
@@ -13,10 +13,10 @@ import { calculateSipPure } from '@/engine/calculators/money/sip';
 import { calculateAttendancePure } from '@/engine/calculators/student/attendance';
 
 describe('LifeCalc Production Security, Auth, & Persistence Journeys', () => {
-  it('Journey 1: Guest Quota strictly permits 15 calculations and blocks the 16th with HTTP 429', async () => {
+  it('Journey 1: Guest can calculate freely without quota limits or HTTP 429 blocks', async () => {
     const sessionId = `guest_test_${Date.now()}`;
 
-    for (let i = 1; i <= 15; i++) {
+    for (let i = 1; i <= 20; i++) {
       const req = new NextRequest('http://localhost:3000/api/calculate', {
         method: 'POST',
         headers: {
@@ -25,7 +25,7 @@ describe('LifeCalc Production Security, Auth, & Persistence Journeys', () => {
         },
         body: JSON.stringify({
           calculatorId: 'emi',
-          inputs: { principal: 100000, annualRate: 10, tenureYears: 1 },
+          inputs: { principal: 100000 + i * 5000, annualRate: 10, tenureYears: 1 },
         }),
       });
 
@@ -33,30 +33,8 @@ describe('LifeCalc Production Security, Auth, & Persistence Journeys', () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.isGuest).toBe(true);
-      expect(data.calculationsUsed).toBe(i);
-      expect(data.calculationsRemaining).toBe(15 - i);
-      expect(data.quotaReached).toBe(i === 15);
       expect(data.result.primary.value).toBeGreaterThan(0);
     }
-
-    // 16th attempt should return HTTP 429
-    const blockedReq = new NextRequest('http://localhost:3000/api/calculate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Cookie: `lifecalc_guest_sid=${sessionId}`,
-      },
-      body: JSON.stringify({
-        calculatorId: 'emi',
-        inputs: { principal: 100000, annualRate: 10, tenureYears: 1 },
-      }),
-    });
-
-    const blockedRes = await calculatePost(blockedReq);
-    expect(blockedRes.status).toBe(429);
-    const blockedData = await blockedRes.json();
-    expect(blockedData.quotaReached).toBe(true);
-    expect(blockedData.calculationsRemaining).toBe(0);
   });
 
   it('Journey 2: Real Secure Authentication, Session Validation, Signout & Negative Tests', async () => {
@@ -170,7 +148,8 @@ describe('LifeCalc Production Security, Auth, & Persistence Journeys', () => {
     expect(authedCalcRes.status).toBe(200);
     const authedData = await authedCalcRes.json();
     expect(authedData.isGuest).toBe(false);
-    expect(authedData.calculationsRemaining).toBe(-1);
+    // Calculations unmetered for authenticated users
+    expect(authedData.isGuest).toBe(false);
 
     // 10. Logout invalidates session in DB
     const signoutReq = new NextRequest('http://localhost:3000/api/auth/signout', {
@@ -197,7 +176,7 @@ describe('LifeCalc Production Security, Auth, & Persistence Journeys', () => {
       body: JSON.stringify({
         name: "User A's Home Loan",
         calculatorId: 'emi',
-        primaryResult: '₹43,391 / mo',
+        primaryResult: 'â‚¹43,391 / mo',
         notes: 'User A confidential note',
         inputs: { principal: 5000000, annualRate: 8.5, tenureYears: 20 },
       }),
@@ -286,3 +265,5 @@ describe('LifeCalc Production Security, Auth, & Persistence Journeys', () => {
     expect(badShareGetRes.status).toBe(404);
   });
 });
+
+

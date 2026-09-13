@@ -309,3 +309,37 @@
 - `npm test` (Vitest): 70/70 passed across 8 test suites (including `auth-verification.test.ts` and `calculator-regression.test.ts`).
 - `npm run build`: 47 static & dynamic routes compiled successfully without hydration or suspense warnings.
 - `npm run test:e2e`: 4/4 Playwright browser tests passed in Chromium.
+## [Entry 011] — 2026-09-13: Removal of Guest Quotas, Unmetered Live Preview & Meaningful Engagement Nudges
+
+### What Was Audited & Implemented
+1. **Complete Removal of the 15-Calculation Guest Quota**:
+   - Eliminated the 15-calculation credit limit, HTTP 429 quota blocking, and credit decrement logic from src/app/api/calculate/route.ts.
+   - Removed all quota-related header UI badges, remaining counter indicators (Free calculations: X/15), and quota-warning banners from src/components/layout/Header.tsx and src/components/calculator/CalculatorRunner.tsx.
+   - Updated src/app/(marketing)/privacy/page.tsx copy to reflect that sessions are maintained for rate-limiting and stability without imposing a calculation quota.
+2. **Pure Unmetered Live Preview Interaction Model**:
+   - Removed the artificial requirement for a "Calculate & Verify" button.
+   - Users and guests can explore any calculator freely with instant live calculations, dynamic SVG charts, and interactive schedule breakdowns updating on every keystroke/slider adjustment.
+3. **Meaningful Calculator Usage & Guest Account Nudge System (src/lib/guestUsage.ts, src/components/calculator/GuestAccountNudge.tsx)**:
+   - Engineered a meaningful session tracking model:
+     - Only valid input models generating legitimate primary results are counted.
+     - Debounced settle timer ensures individual keystrokes, validation errors, chart redraws, or re-renders do NOT count as multiple usages.
+     - Multiple adjustments on the same calculator within an active session count as ONE usage.
+   - Designed a polite, non-blocking toast/sheet prompt ("Get more from LifeCalc"):
+     - Highlights benefits: saved calculations, history across devices, cloud sharing, and custom scenarios.
+     - Three clear actions: "Create free account" (primary), "Sign in" (secondary), and "Continue as guest" (tertiary / dismiss).
+     - Configurable threshold interval (default 5): triggers prompts at 5, 10, 15, 20...
+     - Dismissing closes the prompt immediately, never blocks calculations, and pauses prompts until another 5 meaningful uses.
+     - Authenticated users and signed-in sessions are completely excluded from guest prompts.
+4. **Preservation of Core Authentication, Persistence & DB Foundations**:
+   - Retained existing scrypt password hashing, HMAC session tokens, fail-closed Supabase architecture, and authenticated scenario/history APIs.
+   - The database structure (guest_quotas table) remains backward compatible and unbreaking for existing schemas.
+
+### Verification Status
+- 
+pm run typecheck: 0 TypeScript errors.
+- 
+pm test (Vitest): 78/78 tests passing across 9 test suites (including newly added guest-engagement.test.ts).
+- 
+pm run build: 47 static and dynamic Next.js routes compiled cleanly with 0 errors.
+- 
+pm run test:e2e (Playwright): 4/4 end-to-end browser tests passed in Chromium (unmetered Live Preview, auth flow, scenario persistence, and calculation sharing).

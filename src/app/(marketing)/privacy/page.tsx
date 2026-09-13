@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { ShieldCheck, Lock, EyeOff } from 'lucide-react';
 
 export default function PrivacyPage() {
@@ -9,7 +9,7 @@ export default function PrivacyPage() {
           Privacy Policy
         </h1>
         <p className="text-xs text-slate-500">
-          Last updated: September 2026 • LifeCalc Platform
+          Last updated: September 2026 â€¢ LifeCalc Platform
         </p>
       </div>
 
@@ -25,7 +25,7 @@ export default function PrivacyPage() {
         <section className="space-y-2">
           <h2 className="text-base font-bold text-slate-900">1. Information We Collect</h2>
           <p>
-            <strong>Guest Users:</strong> When using LifeCalc without an account, calculation values remain client-side in your browser. An anonymous, temporary session identifier is tracked solely to prevent automated bot abuse and manage the 15-calculation guest quota.
+            <strong>Guest Users:</strong> When using LifeCalc without an account, calculation values remain client-side in your browser. An anonymous, temporary session identifier is tracked solely to prevent automated bot abuse and ensure system stability.
           </p>
           <p>
             <strong>Registered Users:</strong> If you choose to create a free account, we store your email address, profile preferences, and any calculations you explicitly choose to save into your personal dashboard.
@@ -61,3 +61,4 @@ export default function PrivacyPage() {
     </div>
   );
 }
+

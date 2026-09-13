@@ -2,9 +2,6 @@
 import { registry } from '@/engine/registry';
 import { getUserFromRequest } from '@/lib/auth';
 import { getOrCreateGuestId } from '@/lib/guest';
-import { getGuestQuota, incrementGuestQuotaAtomic } from '@/lib/db';
-
-const GUEST_MAX_CALCULATIONS = 15;
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,52 +40,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         result,
         isGuest: false,
-        calculationsUsed: 0,
-        calculationsRemaining: -1,
-        quotaReached: false,
       });
     }
 
-    // 4. Authoritative Persistent Guest Quota Tracking (Single Atomic Operation)
+    // 4. Guest Calculation — Freely allowed without quota blocking
     const { guestId, signedCookie, isNew } = getOrCreateGuestId(req);
 
-    const { allowed, count: newCount } = await incrementGuestQuotaAtomic(guestId, GUEST_MAX_CALCULATIONS);
-
-    // If calculation limit exceeded, block request with HTTP 429
-    if (!allowed) {
-      const blockedResponse = NextResponse.json(
-        {
-          error: 'Guest calculation limit reached',
-          message: "You've used your 15 free calculations. Sign in for unlimited free calculations and save your progress.",
-          isGuest: true,
-          calculationsUsed: newCount,
-          calculationsRemaining: 0,
-          quotaReached: true,
-        },
-        { status: 429 }
-      );
-      if (isNew) {
-        blockedResponse.cookies.set('lifecalc_guest_sid', signedCookie, {
-          httpOnly: true,
-          sameSite: 'lax',
-          secure: process.env.NODE_ENV === 'production',
-          maxAge: 30 * 24 * 60 * 60,
-          path: '/',
-        });
-      }
-      return blockedResponse;
-    }
-
-    const calculationsRemaining = Math.max(0, GUEST_MAX_CALCULATIONS - newCount);
-    const quotaReached = newCount >= GUEST_MAX_CALCULATIONS;
-
-    // Response includes the result (even for the 15th calculation) + quota status
     const response = NextResponse.json({
       result,
       isGuest: true,
-      calculationsUsed: newCount,
-      calculationsRemaining,
-      quotaReached,
+      guestId,
     });
 
     if (isNew) {
@@ -111,38 +72,17 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  // Query current guest quota status without incrementing count
   const authenticatedUser = await getUserFromRequest(req);
 
   if (authenticatedUser) {
     return NextResponse.json({
       isGuest: false,
-      calculationsUsed: 0,
-      calculationsRemaining: -1,
-      quotaReached: false,
     });
   }
 
-  const { guestId, signedCookie, isNew } = getOrCreateGuestId(req);
-  const count = await getGuestQuota(guestId);
-  const remaining = Math.max(0, GUEST_MAX_CALCULATIONS - count);
-
-  const res = NextResponse.json({
+  const { guestId } = getOrCreateGuestId(req);
+  return NextResponse.json({
     isGuest: true,
-    calculationsUsed: count,
-    calculationsRemaining: remaining,
-    quotaReached: count >= GUEST_MAX_CALCULATIONS,
+    guestId,
   });
-
-  if (isNew) {
-    res.cookies.set('lifecalc_guest_sid', signedCookie, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 30 * 24 * 60 * 60,
-      path: '/',
-    });
-  }
-
-  return res;
 }

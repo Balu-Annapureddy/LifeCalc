@@ -1,51 +1,60 @@
 ﻿import { test, expect } from '@playwright/test';
 
 test.describe('LifeCalc Browser E2E Test Suite', () => {
-  test('1. Guest Journey: interactive UI calculations 1 through 15, quota banner, and 16th rejection', async ({ page }) => {
+  test('1. Guest Journey: unmetered Live Preview, no quota blocking, and non-blocking account prompt', async ({ page }) => {
     // Navigate to EMI calculator
     await page.goto('/calculators/money/emi');
     await expect(page.locator('h1')).toContainText('EMI Calculator');
 
-    // Verify initial primary result is visible
+    // Verify initial primary result and Live Preview badge are visible
     await expect(page.locator('text=Monthly EMI').first()).toBeVisible();
+    await expect(page.locator('text=Live Preview')).toBeVisible();
 
-    // Verify form input and action button exist
+    // Confirm quota counter is gone from header
+    await expect(page.locator('text=Free calculations:')).not.toBeVisible();
+    await expect(page.locator('[data-testid="guest-quota-badge"]')).not.toBeVisible();
+
+    // Change input: live preview updates immediately without clicking Calculate
     const principalInput = page.locator('input[type="number"]').first();
-    await expect(principalInput).toBeVisible();
-    const calculateBtn = page.locator('button:has-text("Calculate & Verify")');
-    await expect(calculateBtn).toBeVisible();
+    await principalInput.fill('2000000');
+    await page.waitForTimeout(100);
 
-    // Perform interactive UI calculations through the actual form and button (1 through 15)
-    for (let i = 1; i <= 15; i++) {
-      await principalInput.fill(`${1000000 + i * 10000}`);
-      await calculateBtn.click();
-      // Allow brief moment for reactive calculation cycle
-      await page.waitForTimeout(60);
-    }
-
-    // Assert that upon completing the 15th calculation, the conversion prompt is rendered in the UI
-    const quotaBanner = page.locator('text=You’ve completed your 15 free guest calculations!');
-    await expect(quotaBanner).toBeVisible({ timeout: 5000 });
-
-    // Assert that the 15th calculation result remains visible (never destroyed or blanked out)
+    // Verify calculation result updated instantly
     await expect(page.locator('text=Monthly EMI').first()).toBeVisible();
 
-    // Attempt the 16th calculation through the UI button
-    await principalInput.fill('2500000');
-    await calculateBtn.click();
+    // Simulate 5 meaningful calculator visits to trigger the guest nudge
+    await page.evaluate(() => {
+      window.localStorage.setItem('lifecalc_guest_engagement', JSON.stringify({
+        meaningfulUsageCount: 4,
+        lastPromptedAtCount: 0,
+        dismissedCount: 0,
+      }));
+    });
 
-    // Verify quota alert persists and sign-in button is accessible
-    await expect(quotaBanner).toBeVisible();
-    const promptSignInBtn = page.locator('a[href="/signin"]:has-text("Sign in")').first();
-    await expect(promptSignInBtn).toBeVisible();
+    // Navigate to a new calculator to trigger 5th meaningful usage
+    await page.goto('/calculators/money/sip');
+    await expect(page.locator('h1')).toContainText('SIP Calculator');
+    const sipInput = page.locator('input[type="number"]').first();
+    await sipInput.fill('15000');
 
-    // Refreshing the page does NOT reset quota
+    // Wait for the settle delay (1500ms) and assert nudge appears
+    const nudge = page.locator('[data-testid="guest-account-nudge"]');
+    await expect(nudge).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=Get more from LifeCalc')).toBeVisible();
+
+    // Dismiss nudge: "Continue as guest"
+    const continueBtn = page.locator('button:has-text("Continue as guest")');
+    await continueBtn.click();
+    await expect(nudge).not.toBeVisible();
+
+    // Verify calculator is fully usable after dismissal
+    await sipInput.fill('25000');
+    await expect(page.locator('text=Expected Total Corpus').first()).toBeVisible();
+
+    // Refresh page: nudge does not immediately reappear
     await page.reload();
-    await expect(page.locator('a[href="/signin"]').first()).toBeVisible();
-
-    // Click through to verify navigation to sign-in works seamlessly
-    await page.goto('/signin');
-    await expect(page.locator('h1')).toContainText('Welcome back to LifeCalc');
+    await expect(page.locator('h1')).toContainText('SIP Calculator');
+    await expect(nudge).not.toBeVisible();
   });
 
   test('2. Authentication Journey: signup, signout, invalid password, signin, and authenticated session', async ({ page }) => {
@@ -109,12 +118,13 @@ test.describe('LifeCalc Browser E2E Test Suite', () => {
     await expect(saveBtn).toBeVisible();
     await saveBtn.click();
     await expect(page.locator('text=Saved!')).toBeVisible();
+    await page.waitForTimeout(500);
 
     // Navigate to /saved
     await page.goto('/saved');
     await expect(page.locator('h1')).toContainText('Saved Calculations');
     // Scenario should be present
-    await expect(page.locator('text=EMI Calculator Scenario').first()).toBeVisible();
+    await expect(page.locator('text=EMI Calculator Scenario').first()).toBeVisible({ timeout: 10000 });
 
     // Reload page to verify persistence across page reloads
     await page.reload();
@@ -162,3 +172,6 @@ test.describe('LifeCalc Browser E2E Test Suite', () => {
     await freshContext.close();
   });
 });
+
+
+

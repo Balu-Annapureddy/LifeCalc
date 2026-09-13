@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
@@ -24,6 +24,8 @@ import {
 import { formatCurrency } from '@/engine/formatters';
 
 import { registry } from '@/engine/registry';
+import { GuestAccountNudge } from './GuestAccountNudge';
+import { recordMeaningfulUsage, dismissAccountPrompt } from '@/lib/guestUsage';
 
 interface CalculatorRunnerProps {
   calculatorId: string;
@@ -54,22 +56,18 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
   const [copiedShare, setCopiedShare] = useState(false);
   const [showTable, setShowTable] = useState(false);
 
-  // Server quota state
-  const [quotaExceeded, setQuotaExceeded] = useState(false);
-  const [remainingQuota, setRemainingQuota] = useState<number | null>(null);
+  // Guest Account Nudge state
+  const [showNudge, setShowNudge] = useState(false);
+  const [usageCount, setUsageCount] = useState(0);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Sync server quota on mount
+  // Check auth status on mount
   React.useEffect(() => {
-    fetch('/api/calculate')
+    fetch('/api/auth/me')
       .then(res => res.json())
       .then(data => {
-        if (data.isGuest !== undefined) {
-          if (data.calculationsRemaining !== undefined) {
-            setRemainingQuota(data.calculationsRemaining);
-          }
-          if (data.quotaReached) {
-            setQuotaExceeded(true);
-          }
+        if (data.authenticated) {
+          setIsAuthenticated(true);
         }
       })
       .catch(() => {});
@@ -87,6 +85,22 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
       return calculator.calculate(defaultValues);
     }
   }, [calculator, inputs, defaultValues]);
+
+  // Track meaningful calculator engagement (settled interaction on valid result)
+  React.useEffect(() => {
+    if (isAuthenticated) return;
+    const timer = setTimeout(() => {
+      if (currentResult && currentResult.primary && currentResult.primary.value !== undefined) {
+        const { shouldPrompt, currentCount } = recordMeaningfulUsage(calculator.id, isAuthenticated);
+        setUsageCount(currentCount);
+        if (shouldPrompt) {
+          setShowNudge(true);
+        }
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [inputs, calculator.id, currentResult, isAuthenticated]);
 
   const handleInputChange = (id: string, value: any) => {
     setInputs(prev => ({ ...prev, [id]: value }));
@@ -162,97 +176,11 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
     } catch {}
   };
 
-  // Synchronize execution with server quota tracking & history
-  const handleServerExecution = async () => {
-    try {
-      const res = await fetch('/api/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          calculatorId: calculator.id,
-          inputs,
-        }),
-      });
-      const data = await res.json();
-      if (data.quotaReached) {
-        setQuotaExceeded(true);
-      }
-      if (data.calculationsRemaining !== undefined) {
-        setRemainingQuota(data.calculationsRemaining);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('lifecalc:quota-update', {
-            detail: { calculationsRemaining: data.calculationsRemaining, isGuest: data.isGuest }
-          }));
-        }
-      }
 
-      // Record to history
-      fetch('/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          calculatorId: calculator.id,
-          summary: currentResult.summaryExplanation,
-          primaryValue: currentResult.primary.formattedValue,
-          inputs,
-        }),
-      }).catch(() => {});
-
-      // Sync local history
-      const localHistory = JSON.parse(localStorage.getItem('lifecalc_history') || '[]');
-      localStorage.setItem('lifecalc_history', JSON.stringify([
-        {
-          id: `hist_${Date.now()}`,
-          calculatorId: calculator.id,
-          summary: currentResult.summaryExplanation,
-          primaryValue: currentResult.primary.formattedValue,
-          timestamp: 'Just now',
-          inputs,
-        },
-        ...localHistory,
-      ].slice(0, 50)));
-    } catch {
-      // Fallback: client calculation already succeeded
-    }
-  };
 
   return (
     <div className="space-y-8">
-      {/* Friendly Guest Quota Conversion Prompt (Requirements 4, 76) */}
-      {quotaExceeded && (
-        <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50/50 p-5 sm:p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-blue-600" />
-                <h3 className="font-semibold text-slate-900 text-base">
-                  You’ve completed your 15 free guest calculations!
-                </h3>
-              </div>
-              <p className="text-sm text-slate-600">
-                Your current calculation is still displayed below. Sign in to unlock unlimited calculations, save your progress, and access across devices.
-              </p>
-              <p className="text-xs text-blue-700 font-medium">
-                No payment required. Basic LifeCalc calculations are completely free.
-              </p>
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <Link
-                href="/signin"
-                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/signup"
-                className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors"
-              >
-                Create free account
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Main 2-Column Calculator Workstation */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -280,17 +208,7 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
             ))}
           </div>
 
-          <div className="pt-2 space-y-1.5">
-            <button
-              onClick={handleServerExecution}
-              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-sm transition-all focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center justify-center gap-2"
-            >
-              <span>Calculate & Verify</span>
-            </button>
-            <p className="text-[11px] text-center text-slate-400">
-              Live preview updates instantly. Click to verify & save to official history.
-            </p>
-          </div>
+
         </div>
 
         {/* Right Col: Primary & Secondary Results */}
@@ -536,6 +454,17 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
         </section>
       )}
 
+      {/* Guest Account Nudge */}
+      {showNudge && (
+        <GuestAccountNudge
+          usageCount={usageCount}
+          onDismiss={() => {
+            setShowNudge(false);
+            dismissAccountPrompt();
+          }}
+        />
+      )}
+
       {/* Related Calculators (Requirement 24) */}
       {relatedCalculators.length > 0 && (
         <section className="space-y-4">
@@ -650,7 +579,7 @@ const InputField: React.FC<{
         <div className="relative">
           {input.type === 'currency' && (
             <span className="absolute left-3 top-2.5 text-sm font-semibold text-slate-400">
-              ₹
+              â‚¹
             </span>
           )}
           <input
@@ -728,3 +657,6 @@ const SimpleDonutChart: React.FC<{ data: { label: string; value: number }[] }> =
     </div>
   );
 };
+
+
+

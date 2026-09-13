@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -20,24 +20,31 @@ export default function SavedPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Read local cache immediately
+    const local = typeof window !== 'undefined' ? localStorage.getItem('lifecalc_saved') : null;
+    let localItems: SavedScenario[] = [];
+    if (local) {
+      try {
+        localItems = JSON.parse(local);
+        if (Array.isArray(localItems) && localItems.length > 0) {
+          setSavedList(localItems);
+        }
+      } catch {}
+    }
+
+    // 2. Fetch server records and merge with local items
     fetch('/api/saved')
       .then(res => res.json())
       .then(data => {
-        if (data.items) {
-          setSavedList(data.items);
-        } else {
-          const local = localStorage.getItem('lifecalc_saved');
-          if (local) {
-            try { setSavedList(JSON.parse(local)); } catch {}
+        if (data.items && Array.isArray(data.items)) {
+          if (data.items.length > 0) {
+            setSavedList(data.items);
+          } else if (localItems.length === 0) {
+            setSavedList([]);
           }
         }
       })
-      .catch(() => {
-        const local = localStorage.getItem('lifecalc_saved');
-        if (local) {
-          try { setSavedList(JSON.parse(local)); } catch {}
-        }
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -147,3 +154,6 @@ export default function SavedPage() {
     </div>
   );
 }
+
+
+
