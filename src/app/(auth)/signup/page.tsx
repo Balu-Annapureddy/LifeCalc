@@ -3,20 +3,35 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Calculator, ShieldCheck, Check } from 'lucide-react';
+import { Calculator, ShieldCheck, Check, Eye, EyeOff, Info } from 'lucide-react';
 
 export default function SignUpPage() {
   const router = useRouter();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match. Please ensure both passwords match.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch('/api/auth/signup', {
@@ -28,13 +43,57 @@ export default function SignUpPage() {
       if (!res.ok) {
         throw new Error(data.error || 'Failed to create account');
       }
-      window.location.href = '/';
+
+      if (data.verificationRequired) {
+        setIsSubmitted(true);
+      } else {
+        window.location.href = '/';
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
   };
+
+  if (isSubmitted) {
+    return (
+      <div className="max-w-md mx-auto py-12 px-4 space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-md">
+            <Check className="w-6 h-6" />
+          </div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+            Verify Your Email
+          </h1>
+          <p className="text-xs text-slate-500">
+            We sent a verification link to <span className="font-semibold text-slate-700">{email}</span>.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm space-y-5">
+          <div className="p-4 bg-blue-50/70 border border-blue-100 rounded-xl space-y-2 text-xs text-blue-900">
+            <div className="font-semibold flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-blue-600 shrink-0" />
+              Almost finished!
+            </div>
+            <p className="text-blue-800 text-xs leading-relaxed">
+              Please click the link in the verification email to fully activate your LifeCalc account. You can also start using LifeCalc immediately in the meantime.
+            </p>
+          </div>
+
+          <div className="pt-2 flex flex-col gap-3">
+            <a
+              href="/"
+              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors text-center"
+            >
+              Continue to LifeCalc
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto py-12 px-4 space-y-6">
@@ -46,7 +105,7 @@ export default function SignUpPage() {
           Create Your Free LifeCalc Account
         </h1>
         <p className="text-xs text-slate-500">
-          Unlimited calculations, saved history, and synchronisation across your devices.
+          Save calculation scenarios, track history, and sync across your devices.
         </p>
       </div>
 
@@ -59,7 +118,7 @@ export default function SignUpPage() {
           <ul className="space-y-1 text-blue-800 text-[11px]">
             <li className="flex items-center gap-1.5">
               <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-              Unlimited basic calculation executions
+              Unlimited calculation executions & Live Previews
             </li>
             <li className="flex items-center gap-1.5">
               <Check className="w-3 h-3 text-emerald-600 shrink-0" />
@@ -79,7 +138,7 @@ export default function SignUpPage() {
         )}
 
         {/* Continue with Google */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           <a
             href="/api/auth/oauth/google"
             className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-sm font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2.5"
@@ -104,24 +163,27 @@ export default function SignUpPage() {
             </svg>
             <span>Continue with Google</span>
           </a>
+          <p className="text-[11px] text-slate-400 text-center">
+            Your Google password is never shared with LifeCalc.
+          </p>
 
-          <div className="relative flex items-center justify-center my-2">
+          <div className="relative flex items-center justify-center pt-3 pb-1">
             <div className="border-t border-slate-200 w-full" />
             <span className="bg-white px-3 text-[11px] text-slate-400 uppercase tracking-wider font-medium absolute">
-              or register with email
+              or create account with email
             </span>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">Your Name</label>
+            <label className="text-xs font-semibold text-slate-700">Full Name</label>
             <input
               type="text"
               required
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Your full name"
+              placeholder="e.g. Alex Morgan"
               className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             />
           </div>
@@ -139,15 +201,50 @@ export default function SignUpPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-            />
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700">LifeCalc Password</label>
+              <span className="text-[11px] text-slate-400">Min 8 characters</span>
+            </div>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Create a password for your LifeCalc account"
+                className="w-full px-3 py-2 pr-10 text-sm rounded-lg border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">Confirm Password</label>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Confirm your LifeCalc password"
+                className="w-full px-3 py-2 pr-10 text-sm rounded-lg border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+              >
+                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           <button

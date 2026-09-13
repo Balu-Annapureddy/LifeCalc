@@ -31,8 +31,24 @@ export async function POST(req: NextRequest) {
     const user = await findUserByEmail(normalizedEmail);
     // Strict security: Unknown users must return 401, NEVER auto-provision!
     if (!user) {
+      // Execute dummy verifyPassword against random hash to prevent timing-based user enumeration
+      verifyPassword(password, '0'.repeat(128), '0'.repeat(32));
       await recordFailedLogin(normalizedEmail);
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    }
+
+    // If account was created via Google and has not set a LifeCalc password
+    if (user.passwordHash === 'OAUTH_PROVIDER_GOOGLE') {
+      verifyPassword(password, '0'.repeat(128), '0'.repeat(32));
+      await recordFailedLogin(normalizedEmail);
+      return NextResponse.json(
+        {
+          error:
+            'This account was created with Google. Please use "Continue with Google" or use "Forgot password" to set a LifeCalc password.',
+          isOAuthAccount: true,
+        },
+        { status: 401 }
+      );
     }
 
     const isValid = verifyPassword(password, user.passwordHash, user.salt);

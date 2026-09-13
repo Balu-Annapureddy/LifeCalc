@@ -1,7 +1,7 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { registry } from '@/engine/registry';
 import { getUserFromRequest } from '@/lib/auth';
-import { getOrCreateGuestId } from '@/lib/guest';
+import { getOrCreateGuestId, attachGuestCookie } from '@/lib/guest';
 
 export async function POST(req: NextRequest) {
   try {
@@ -52,16 +52,7 @@ export async function POST(req: NextRequest) {
       guestId,
     });
 
-    if (isNew) {
-      response.cookies.set('lifecalc_guest_sid', signedCookie, {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 30 * 24 * 60 * 60,
-        path: '/',
-      });
-    }
-
+    attachGuestCookie(response, signedCookie, isNew);
     return response;
   } catch (error: any) {
     return NextResponse.json(

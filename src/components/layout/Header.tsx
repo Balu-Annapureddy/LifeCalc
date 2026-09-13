@@ -1,24 +1,36 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Calculator, User, Search, Menu, X } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; emailVerified?: boolean } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     // Check auth status
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (data.authenticated && data.user) {
-          setCurrentUser(data.user);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    const checkAuth = () => {
+      fetch('/api/auth/me')
+        .then(res => res.json())
+        .then(data => {
+          if (data.authenticated && data.user) {
+            setCurrentUser(data.user);
+          } else {
+            setCurrentUser(null);
+          }
+        })
+        .catch(() => {});
+    };
+
+    checkAuth();
+    window.addEventListener('lifecalc-auth-change', checkAuth);
+    return () => {
+      window.removeEventListener('lifecalc-auth-change', checkAuth);
+    };
+  }, [pathname]);
 
   const handleSignOut = async () => {
     try {
@@ -181,6 +193,14 @@ export const Header: React.FC = () => {
           <div className="pt-3 border-t border-slate-100 space-y-2">
             {currentUser ? (
               <>
+                <div className="px-3 py-1.5 flex items-center justify-between text-xs font-medium text-slate-700 bg-slate-50 rounded-lg">
+                  <span>{currentUser.name || currentUser.email.split('@')[0]}</span>
+                  {currentUser.emailVerified === false && (
+                    <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-1.5 py-0.5 rounded">
+                      Unverified
+                    </span>
+                  )}
+                </div>
                 <Link
                   href="/saved"
                   onClick={() => setMobileMenuOpen(false)}

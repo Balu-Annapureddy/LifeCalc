@@ -8,6 +8,7 @@ import {
   insertSession,
   findSession,
   deleteSessionByHash,
+  deleteSessionsByUserId,
   checkLoginRateLimit as dbCheckRateLimit,
   recordFailedLogin as dbRecordFailedLogin,
   resetLoginAttempts as dbResetLoginAttempts,
@@ -143,6 +144,12 @@ export async function verifySessionToken(token: string): Promise<SafeUser | null
 export async function invalidateSession(token: string): Promise<void> {
   if (!token) return;
   await deleteSessionByHash(hashToken(token));
+}
+
+// Invalidate all active sessions for a user (e.g. after password reset)
+export async function invalidateAllUserSessions(userId: string): Promise<void> {
+  if (!userId) return;
+  await deleteSessionsByUserId(userId);
 }
 
 // Helper to extract authenticated user strictly from server cookie

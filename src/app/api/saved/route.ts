@@ -1,6 +1,6 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
-import { getOrCreateGuestId } from '@/lib/guest';
+import { getOrCreateGuestId, attachGuestCookie } from '@/lib/guest';
 import {
   getSavedScenariosByUserId,
   insertSavedScenario,
@@ -16,16 +16,7 @@ export async function GET(req: NextRequest) {
     const items = await getSavedScenariosByUserId(userId);
     const response = NextResponse.json({ items });
 
-    if (isNew) {
-      response.cookies.set('lifecalc_guest_sid', signedCookie, {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 30 * 24 * 60 * 60,
-        path: '/',
-      });
-    }
-
+    attachGuestCookie(response, signedCookie, isNew);
     return response;
   } catch (err: any) {
     return NextResponse.json({ error: 'Failed to retrieve saved scenarios' }, { status: 500 });
@@ -45,27 +36,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing name, calculatorId, or inputs' }, { status: 400 });
     }
 
+    if (typeof inputs !== 'object' || JSON.stringify(inputs).length > 8192) {
+      return NextResponse.json({ error: 'Calculation inputs payload too large' }, { status: 400 });
+    }
+
+    const cappedName = typeof name === 'string' ? name.trim().slice(0, 100) : 'Scenario';
+    const cappedResult = typeof primaryResult === 'string' ? primaryResult.slice(0, 50) : '';
+    const cappedNotes = typeof notes === 'string' ? notes.trim().slice(0, 500) : '';
+
     const newItem = await insertSavedScenario({
       userId,
-      name: name.trim(),
+      name: cappedName,
       calculatorId,
-      primaryResult: primaryResult || '',
-      notes: notes ? notes.trim() : '',
+      primaryResult: cappedResult,
+      notes: cappedNotes,
       inputs,
     });
 
     const response = NextResponse.json({ success: true, item: newItem });
-
-    if (isNew) {
-      response.cookies.set('lifecalc_guest_sid', signedCookie, {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 30 * 24 * 60 * 60,
-        path: '/',
-      });
-    }
-
+    attachGuestCookie(response, signedCookie, isNew);
     return response;
   } catch (err: any) {
     return NextResponse.json({ error: 'Failed to save scenario' }, { status: 500 });

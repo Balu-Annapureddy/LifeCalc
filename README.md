@@ -8,7 +8,7 @@
 ## Architecture Principles
 
 1. **Deterministic Mathematics First**: All formulas (EMI, SIP, Compound Interest, CAGR, Indian CTC-to-in-hand, Attendance 75% thresholds) are pure, standalone functions with zero UI or database coupling.
-2. **Tamper-Proof Guest Quota (15 Free Calculations)**: Tracked authoritatively via server-side session cookies; client-side localStorage cannot bypass restrictions. Reaching 15 calculations preserves the current result and offers a friendly, non-destructive invitation to create a free account.
+2. **Unmetered Live Previews & Meaningful Engagement**: Instant calculation results and dynamic charts update without paywalls or artificial calculation quotas. After sustained, meaningful exploration, guests receive a polite, non-blocking invitation to save scenarios and sync across devices.
 3. **100% Free Core Calculators**: Basic calculators remain free forever without artificial paywalls. Premium exists for ad-free experience, multi-year expense analytics, and AI explanation layers.
 4. **Desktop Side-Rail Ads with Zero Intrusion**: Clean, isolated `AdSlot` components placed strictly in side rails on desktop (>=1280px) and non-blocking inline slots on mobile. Automatically suppressed for premium members.
 5. **Progressive Web App (PWA)**: Multi-platform installability on Android, iOS, Windows, macOS, and Linux with offline support for deterministic calculators.
@@ -65,13 +65,16 @@ npm run build
 
 ## Calculator Catalog
 
-### 💰 Money & Loans
+### 💰 Money & Everyday Expenses
 - **EMI Calculator** (`/calculators/money/emi`): Home, Car, Personal loans with yearly amortization schedule.
 - **SIP Calculator** (`/calculators/money/sip`): Mutual funds wealth accumulation and year-by-year compounding.
 - **CTC to Take-Home** (`/calculators/money/ctc-to-take-home`): Indian salary with New vs Old Tax Regime, EPF, and Professional Tax.
 - **Compound Interest** (`/calculators/money/compound-interest`): Annual, quarterly (Indian FDs), and monthly compounding.
 - **CAGR Calculator** (`/calculators/money/cagr`): Portfolio geometric compound growth rate.
 - **GST Calculator** (`/calculators/money/gst`): Add/remove GST with CGST and SGST splits.
+- **Bill Split & Tip** (`/calculators/money/bill-split`): Group dining expense and tip calculator.
+- **Discount & Savings** (`/calculators/money/discount`): Sale discounts and double-discount promotions.
+- **Fuel Cost & Mileage** (`/calculators/money/fuel-cost`): Road trip fuel estimation, mileage, and carpool split costs.
 
 ### 🎓 Student & Academics
 - **Attendance Calculator** (`/calculators/student/attendance`): 75% university eligibility, lectures to attend or safe bunks.
@@ -84,9 +87,6 @@ npm run build
 
 ### ⏰ Time & Dates
 - **Age Calculator** (`/calculators/time/age`): Exact years, months, days, total days lived, and next birthday countdown.
-
-### 🚗 Everyday Utility
-- **Fuel Cost & Mileage** (`/calculators/everyday/fuel-cost`): Road trip fuel estimation, mileage, and carpool split costs.
 
 ---
 

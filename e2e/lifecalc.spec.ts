@@ -1,4 +1,4 @@
-﻿import { test, expect } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 test.describe('LifeCalc Browser E2E Test Suite', () => {
   test('1. Guest Journey: unmetered Live Preview, no quota blocking, and non-blocking account prompt', async ({ page }) => {
@@ -64,10 +64,15 @@ test.describe('LifeCalc Browser E2E Test Suite', () => {
 
     // 1. Sign Up
     await page.goto('/signup');
-    await page.fill('input[placeholder="Your full name"]', testName);
+    await page.fill('input[placeholder="e.g. Alex Morgan"]', testName);
     await page.fill('input[type="email"]', testEmail);
-    await page.fill('input[type="password"]', testPassword);
+    await page.fill('input[placeholder="Create a password for your LifeCalc account"]', testPassword);
+    await page.fill('input[placeholder="Confirm your LifeCalc password"]', testPassword);
     await page.click('button[type="submit"]');
+
+    // Email verification confirmation screen is displayed
+    await expect(page.locator('text=Verify Your Email')).toBeVisible();
+    await page.click('a:has-text("Continue to LifeCalc")');
 
     // Verify user is authenticated in header
     await page.waitForSelector(`text=${testName}`, { timeout: 10000 });

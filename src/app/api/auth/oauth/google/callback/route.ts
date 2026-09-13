@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { findUserByEmail, insertUser } from '@/lib/db';
-import { createSessionToken, SafeUser } from '@/lib/auth';
+import { createSessionToken, SafeUser, invalidateAllUserSessions } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -78,10 +78,20 @@ export async function GET(req: NextRequest) {
         createdAt: Date.now(),
       });
     } else if (!user.emailVerified) {
-      // If user had unverified password account with matching email, Google verifies it
+      // SECURITY FIX (Anti-Pre-Hijack):
+      // If an unverified account exists with a password set, an attacker may have registered
+      // the victim's email. Google OAuth proves the current user genuinely owns this email.
+      // We must strip the unverified password so the attacker cannot retain access,
+      // invalidate any active sessions the attacker had, and verify the legitimate owner.
+      await invalidateAllUserSessions(user.id);
       user = await insertUser({
         ...user,
+        name: user.name || name,
+        passwordHash: 'OAUTH_PROVIDER_GOOGLE',
+        salt: 'OAUTH_AUTHENTICATED',
         emailVerified: true,
+        verificationToken: null,
+        verificationTokenExpiresAt: null,
       });
     }
 

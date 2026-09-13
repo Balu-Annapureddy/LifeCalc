@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
 import { getOrCreateGuestId } from '@/lib/guest';
 import {
@@ -35,11 +35,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    if (typeof inputs !== 'object' || JSON.stringify(inputs).length > 8192) {
+      return NextResponse.json({ error: 'Calculation inputs payload too large' }, { status: 400 });
+    }
+
+    const cappedSummary = typeof summary === 'string' ? summary.slice(0, 150) : 'Calculation execution';
+    const cappedPrimaryValue = typeof primaryValue === 'string' ? primaryValue.slice(0, 50) : '';
+
     const newItem = await insertHistory({
       userId,
       calculatorId,
-      summary: summary || 'Calculation execution',
-      primaryValue: primaryValue || '',
+      summary: cappedSummary,
+      primaryValue: cappedPrimaryValue,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }),
       inputs,
     });

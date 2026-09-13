@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { findUserByEmail, insertUser } from '@/lib/db';
-import { hashPassword, createSessionToken, SafeUser } from '@/lib/auth';
+import {
+  hashPassword,
+  createSessionToken,
+  SafeUser,
+  checkLoginRateLimit,
+  recordFailedLogin,
+} from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,8 +23,29 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+
+    // Rate limiting to prevent account creation / enumeration spam
+    const rateLimit = await checkLoginRateLimit(`signup:${normalizedEmail}`);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: `Too many registration attempts. Please try again in ${rateLimit.waitSeconds} seconds.` },
+        { status: 429 }
+      );
+    }
+
     const existing = await findUserByEmail(normalizedEmail);
     if (existing) {
+      await recordFailedLogin(`signup:${normalizedEmail}`);
+      if (existing.passwordHash === 'OAUTH_PROVIDER_GOOGLE') {
+        return NextResponse.json(
+          {
+            error:
+              'An account with this email already exists via Google. Please click "Continue with Google" or reset your password to add a LifeCalc password.',
+            isOAuthAccount: true,
+          },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
     }
 

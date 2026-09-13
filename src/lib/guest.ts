@@ -57,3 +57,18 @@ export function getOrCreateGuestId(req: NextRequest): { guestId: string; signedC
     isNew: true,
   };
 }
+
+export function attachGuestCookie(
+  response: { cookies: { set: (name: string, value: string, options: any) => void } },
+  signedCookie: string,
+  isNew: boolean
+): void {
+  if (!isNew) return;
+  response.cookies.set('lifecalc_guest_sid', signedCookie, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 30 * 24 * 60 * 60,
+    path: '/',
+  });
+}
