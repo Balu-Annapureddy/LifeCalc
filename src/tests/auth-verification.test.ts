@@ -6,6 +6,7 @@ import { GET as meGet } from '@/app/api/auth/me/route';
 import { POST as verifyPost, GET as verifyGet } from '@/app/api/auth/verify/route';
 import { POST as resendPost } from '@/app/api/auth/verify/resend/route';
 import { GET as googleOAuthGet } from '@/app/api/auth/oauth/google/route';
+import { GET as googleOAuthCallbackGet } from '@/app/api/auth/oauth/google/callback/route';
 import { POST as forgotPasswordPost } from '@/app/api/auth/forgot-password/route';
 import { POST as resetPasswordPost } from '@/app/api/auth/reset-password/route';
 import { findUserByEmail, findUserById, insertUser } from '@/lib/db';
@@ -266,4 +267,58 @@ describe('LifeCalc Email Verification & Google OAuth Architecture Suite', () => 
     expect(signinData.isOAuthAccount).toBe(true);
     expect(signinData.error).toContain('This account was created with Google');
   });
+
+  it('12. /api/auth/me enforces dynamic evaluation with no-store Cache-Control headers', async () => {
+    // Unauthenticated request
+    const unauthReq = new NextRequest('http://localhost:3000/api/auth/me', { method: 'GET' });
+    const unauthRes = await meGet(unauthReq);
+    expect(unauthRes.status).toBe(200);
+    expect(unauthRes.headers.get('Cache-Control')).toContain('no-store');
+    expect(unauthRes.headers.get('Cache-Control')).toContain('max-age=0');
+    expect(unauthRes.headers.get('Cache-Control')).toContain('must-revalidate');
+
+    // Authenticated request
+    const authReq = new NextRequest('http://localhost:3000/api/auth/me', {
+      method: 'GET',
+      headers: { Cookie: `lifecalc_auth_session=${sessionCookie}` },
+    });
+    const authRes = await meGet(authReq);
+    expect(authRes.status).toBe(200);
+    expect(authRes.headers.get('Cache-Control')).toContain('no-store');
+  });
+
+  it('13. Google OAuth callback redirects cleanly with oauth_unconfigured when env vars are missing', async () => {
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+
+    const req = new NextRequest('http://localhost:3000/api/auth/oauth/google/callback?code=test_code&state=test_state', {
+      method: 'GET',
+    });
+
+    const res = await googleOAuthCallbackGet(req);
+    expect(res.status).toBe(307);
+    const location = res.headers.get('Location') || '';
+    expect(location).toContain('/signin?error=oauth_unconfigured');
+  });
+
+  it('14. Google OAuth callback redirects with invalid_oauth_state on state mismatch or missing cookie', async () => {
+    process.env.GOOGLE_CLIENT_ID = 'mock-google-client-id';
+    process.env.GOOGLE_CLIENT_SECRET = 'mock-google-client-secret';
+
+    // State mismatch: incoming state does not match cookie state
+    const req = new NextRequest('http://localhost:3000/api/auth/oauth/google/callback?code=test_code&state=bad_state', {
+      method: 'GET',
+      headers: { Cookie: 'lifecalc_oauth_state=expected_state' },
+    });
+
+    const res = await googleOAuthCallbackGet(req);
+    expect(res.status).toBe(307);
+    const location = res.headers.get('Location') || '';
+    expect(location).toContain('/signin?error=invalid_oauth_state');
+
+    // Clean up
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+  });
 });
+

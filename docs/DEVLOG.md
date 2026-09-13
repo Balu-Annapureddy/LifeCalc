@@ -435,3 +435,35 @@ On production (`https://life-calc-sable.vercel.app`), opening the site in a fres
 - `npm test` (Vitest): 92/92 tests passing across 10 test suites (including 10 new tests in `src/tests/service-worker.test.ts`).
 - `npm run build`: 52 static and dynamic Next.js routes compiled cleanly with 0 errors.
 - `npm run test:e2e` (Playwright): 4/4 end-to-end browser tests passed in Chromium.
+
+---
+
+## [Entry 014] — 2026-09-13: Google OAuth Diagnostic Hardening & Sign-In Error Visibility
+
+### Problem & Audit Findings
+Users completing Google OAuth were returned to the Sign In page in guest state without error feedback. The audit confirmed:
+1. LifeCalc uses custom Next.js authentication with Supabase PostgreSQL (`public.users` and `public.sessions`). Supabase Auth (`auth.users`) is unused by design.
+2. If any failure occurred during token exchange, userinfo retrieval, DB insert, or session creation in `callback/route.ts`, the route caught the exception and redirected to `/signin?error=...`.
+3. `src/app/(auth)/signin/page.tsx` previously ignored query parameters, rendering a silent blank login page with zero user feedback.
+4. `/api/auth/me` lacked explicit dynamic enforcement and no-store headers, leaving potential for stale session reads.
+
+### Implementation & Hardening
+1. **OAuth Callback Diagnostics (`src/app/api/auth/oauth/google/callback/route.ts`)**:
+   - Added contextual stage tracking (`token_exchange`, `userinfo`, `user_lookup`, `user_create_or_update`, `session_create`).
+   - Logged failure stages, error codes, and messages safely on server console without exposing sensitive tokens, authorization codes, secrets, or passwords.
+   - Maintained neutral user-facing redirects.
+2. **Sign-In OAuth Error Visibility (`src/app/(auth)/signin/page.tsx`)**:
+   - Integrated `useSearchParams()` inside a `<Suspense>` boundary.
+   - Added clear user-friendly error banners mapping known OAuth errors (`invalid_oauth_state`, `oauth_token_exchange_failed`, `oauth_userinfo_failed`, `oauth_email_missing`, `oauth_unconfigured`, `oauth_internal_error`).
+3. **Session Endpoint Cache Prevention (`src/app/api/auth/me/route.ts`)**:
+   - Added `export const dynamic = 'force-dynamic'`.
+   - Attached `Cache-Control: no-store, max-age=0, must-revalidate` to all response branches.
+4. **Database & Key Expectations Verified**:
+   - Confirmed repository schema (`data/schema.sql`) contains `users.reset_token` and `users.reset_token_expires_at` with `idx_users_reset_token`.
+   - Confirmed `SUPABASE_SERVICE_ROLE_KEY` is required because RLS is enabled with zero public policies on `users` and `sessions`.
+
+### Verification Status
+- `npm run typecheck`: 0 TypeScript errors.
+- `npm test` (Vitest): 95/95 tests passing across 10 test suites (including new tests 12–14 for `/api/auth/me` cache headers and callback error routing).
+- `npm run build`: 51 static and dynamic routes compiled without errors.
+- `npm run test:e2e` (Playwright): 4/4 browser journeys passed in Chromium.

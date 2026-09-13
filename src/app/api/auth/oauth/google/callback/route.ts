@@ -12,11 +12,20 @@ export async function GET(req: NextRequest) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
+  let stage = 'init';
+
   if (!clientId || !clientSecret) {
+    console.error('[OAUTH CALLBACK ERROR] Missing Google OAuth client credentials in environment.');
     return NextResponse.redirect(`${req.nextUrl.origin}/signin?error=oauth_unconfigured`);
   }
 
   if (!code || !state || state !== savedState) {
+    console.warn('[OAUTH CALLBACK WARNING] State or code mismatch', {
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+      hasSavedState: Boolean(savedState),
+      matches: Boolean(state && savedState && state === savedState),
+    });
     return NextResponse.redirect(`${req.nextUrl.origin}/signin?error=invalid_oauth_state`);
   }
 
@@ -25,6 +34,7 @@ export async function GET(req: NextRequest) {
     const redirectUri = `${origin}/api/auth/oauth/google/callback`;
 
     // 1. Exchange code for Google access token & ID token
+    stage = 'token_exchange';
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -38,6 +48,10 @@ export async function GET(req: NextRequest) {
     });
 
     if (!tokenRes.ok) {
+      console.error('[OAUTH CALLBACK ERROR] Token exchange failed', {
+        status: tokenRes.status,
+        statusText: tokenRes.statusText,
+      });
       return NextResponse.redirect(`${origin}/signin?error=oauth_token_exchange_failed`);
     }
 
@@ -45,11 +59,15 @@ export async function GET(req: NextRequest) {
     const accessToken = tokenData.access_token;
 
     // 2. Fetch authenticated user profile from Google
+    stage = 'userinfo';
     const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!userRes.ok) {
+      console.error('[OAUTH CALLBACK ERROR] Userinfo request failed', {
+        status: userRes.status,
+      });
       return NextResponse.redirect(`${origin}/signin?error=oauth_userinfo_failed`);
     }
 
@@ -58,12 +76,15 @@ export async function GET(req: NextRequest) {
     const name = (googleUser.name || googleUser.given_name || email.split('@')[0]).trim();
 
     if (!email) {
+      console.error('[OAUTH CALLBACK ERROR] User profile from Google contains no email.');
       return NextResponse.redirect(`${origin}/signin?error=oauth_email_missing`);
     }
 
     // 3. Find or create unified user in LifeCalc database
+    stage = 'user_lookup';
     let user = await findUserByEmail(email);
 
+    stage = 'user_create_or_update';
     if (!user) {
       const userId = `usr_${crypto.randomBytes(12).toString('hex')}`;
       user = await insertUser({
@@ -96,6 +117,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 4. Issue standard authoritative HMAC session
+    stage = 'session_create';
     const safeUser: SafeUser = {
       id: user.id,
       email: user.email,
@@ -120,6 +142,10 @@ export async function GET(req: NextRequest) {
 
     return redirectResponse;
   } catch (err: any) {
+    console.error('[OAUTH CALLBACK ERROR] Internal failure at stage:', stage, {
+      message: err?.message || 'Unknown error',
+      code: err?.code,
+    });
     return NextResponse.redirect(`${req.nextUrl.origin}/signin?error=oauth_internal_error`);
   }
 }
