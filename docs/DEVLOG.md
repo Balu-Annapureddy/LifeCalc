@@ -129,4 +129,51 @@
 - `npm run build`: Next.js production bundle compiled cleanly with 42 prerendered static & dynamic routes.
 - **Production Readiness Rating**: **A — Production Ready** (Self-contained, robust guest conversion model, deterministic mathematical engine, and ready for deployment).
 
+---
+
+## [Entry 005] — 2026-09-13: Production Hardening Sprint (Real Auth, Persistent Architecture, IDOR Protection, & Playwright E2E)
+
+### What Was Implemented & Audited
+1. **Real Cryptographic Authentication (`src/lib/auth.ts`)**:
+   - Replaced pseudo-auth with salted `crypto.scryptSync` (64-byte derived key, 16-byte random salt).
+   - Cryptographically signed HMAC-SHA256 session tokens with 14-day expiration validation and constant-time verification (`crypto.timingSafeEqual`).
+   - Sessions are indexed by SHA-256 hash in the persistent database; logout explicitly invalidates sessions.
+   - Unknown emails on sign-in return HTTP 401 (auto-provisioning removed).
+   - In-memory/session brute-force rate limiter: 5 failed attempts locks out for 15 minutes with HTTP 429.
+   - Sensitive fields (`passwordHash`, `salt`) are strictly stripped from all API outputs.
+2. **Authoritative Guest Quota Hardening (`src/lib/guest.ts`, `/api/calculate`)**:
+   - Guest identifiers are cryptographically signed with HMAC-SHA256 to prevent cookie tampering.
+   - Quota counts are stored in the persistent database, surviving server restarts and multiple server processes.
+   - `/api/calculate` strictly ignores `authToken` in request body, accepting authentication only via verified HTTP-only session cookies.
+   - Preserves 15th calculation result; blocks 16th calculation with HTTP 429.
+3. **Persistent Database Engine (`src/lib/db.ts`)**:
+   - Built atomic file-backed persistent database (`data/lifecalc.json`) with safe temporary file write-and-rename semantics.
+   - Replaced all volatile in-memory Maps (`users`, `sessions`, `guestQuotas`, `history`, `savedScenarios`, `sharedCalculations`).
+   - Implemented strict IDOR protection: `/api/history` and `/api/saved` enforce `item.userId === currentUserId` on all read and delete operations.
+4. **Cryptographic Share Links (`src/lib/share.ts`, `/api/share`)**:
+   - Share IDs generated with 128-bit cryptographic entropy (`crypto.randomBytes(16).toString('hex')`).
+   - Verifies calculator existence and validates inputs using Zod `inputSchema` before persisting and rendering.
+   - Public-read semantics with zero user identity leakage.
+5. **Real Browser Playwright E2E Suite (`e2e/lifecalc.spec.ts`)**:
+   - Added browser tests running against Next.js production server using Chromium:
+     - Guest Journey (calculation, 15 quota trigger, sign-in CTA)
+     - Auth Journey (signup, signout, invalid password rejection, signin, session persistence)
+     - Persistence Journey (save scenario, reload persistence, deletion)
+     - Sharing Journey (share generation, loading in fresh browser context)
+6. **Full Engine Regression Suite (`src/tests/calculator-regression.test.ts`)**:
+   - Comprehensive boundary and mathematical regression tests for all 13 calculators.
+7. **CI Pipeline Hardening (`.github/workflows/ci.yml`)**:
+   - Updated GitHub Actions to run `npm ci`, `typecheck`, Vitest unit/integration tests, Next.js production build, Playwright browser installation, and browser E2E test execution.
+   - Configured artifact upload for Playwright failure traces.
+
+### Verification Status
+- `npm test`: 52 passed across 6 test suites (100% pass rate).
+- `npm run test:e2e`: 4/4 Playwright browser E2E tests passed in Chromium.
+- `npm run typecheck`: 0 TypeScript errors.
+- `npm run build`: Next.js production bundle compiled cleanly with 42 static/dynamic routes.
+
+### Known Limitations
+- Embedded atomic JSON database is designed for single-node / container deployments. For horizontally scaled multi-instance clusters behind a load balancer, set `SUPABASE_URL` / Postgres database connection strings.
+
+
 

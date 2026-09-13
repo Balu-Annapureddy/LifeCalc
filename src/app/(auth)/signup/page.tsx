@@ -28,8 +28,7 @@ export default function SignUpPage() {
       if (!res.ok) {
         throw new Error(data.error || 'Failed to create account');
       }
-      router.push('/');
-      router.refresh();
+      window.location.href = '/';
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     } finally {

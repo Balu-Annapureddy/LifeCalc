@@ -1,26 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { registry } from '@/engine/registry';
+import { getUserFromRequest } from '@/lib/auth';
+import { getOrCreateGuestId } from '@/lib/guest';
+import { getGuestQuota, incrementGuestQuota } from '@/lib/db';
 
-// In-memory server-side session quota store (backed by session ID cookie)
-// In production, this can also query the database `guest_usage` table.
 const GUEST_MAX_CALCULATIONS = 15;
-const sessionQuotaStore = new Map<string, { count: number; lastUsed: number }>();
-
-function cleanupExpiredSessions() {
-  const now = Date.now();
-  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-  for (const [id, session] of sessionQuotaStore.entries()) {
-    if (now - session.lastUsed > 7 * ONE_DAY_MS) {
-      sessionQuotaStore.delete(id);
-    }
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { calculatorId, inputs, authToken } = body;
+    const { calculatorId, inputs } = body;
 
+    // Security: Do NOT accept authToken from body. Authenticated status must come ONLY from server-verified session cookie.
     if (!calculatorId || !inputs) {
       return NextResponse.json({ error: 'Missing calculatorId or inputs' }, { status: 400 });
     }
@@ -45,15 +36,10 @@ export async function POST(req: NextRequest) {
     // 2. Perform authoritative calculation
     const result = calc.calculate(validation.data);
 
-    // 3. Check Authentication vs Guest Quota
-    // If user has auth token/session, they get unlimited calculations
-    const isAuthed = Boolean(
-      authToken ||
-      req.cookies.get('lifecalc_auth_session')?.value ||
-      req.cookies.get('sb-access-token')?.value
-    );
+    // 3. Server-side Authentication Verification
+    const authenticatedUser = getUserFromRequest(req);
 
-    if (isAuthed) {
+    if (authenticatedUser) {
       return NextResponse.json({
         result,
         isGuest: false,
@@ -63,34 +49,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 4. Guest Session Quota Tracking (Tamper-proof server session)
-    let sessionId = req.cookies.get('lifecalc_guest_sid')?.value;
-    let isNewSession = false;
+    // 4. Authoritative Persistent Guest Quota Tracking
+    const { guestId, signedCookie, isNew } = getOrCreateGuestId(req);
+    const currentCount = getGuestQuota(guestId);
 
-    if (!sessionId) {
-      sessionId = `guest_${Math.random().toString(36).substring(2)}_${Date.now()}`;
-      isNewSession = true;
-    }
-
-    cleanupExpiredSessions();
-
-    const currentSession = sessionQuotaStore.get(sessionId) || { count: 0, lastUsed: Date.now() };
-
-    // Requirement 63: 15th calculation works; 16th calculation attempt is blocked
-    if (currentSession.count >= GUEST_MAX_CALCULATIONS) {
+    // 15th calculation works and is displayed; 16th calculation attempt is blocked with 429
+    if (currentCount >= GUEST_MAX_CALCULATIONS) {
       const blockedResponse = NextResponse.json(
         {
           error: 'Guest calculation limit reached',
           message: "You've used your 15 free calculations. Sign in for unlimited free calculations and save your progress.",
           isGuest: true,
-          calculationsUsed: currentSession.count,
+          calculationsUsed: currentCount,
           calculationsRemaining: 0,
           quotaReached: true,
         },
         { status: 429 }
       );
-      if (isNewSession) {
-        blockedResponse.cookies.set('lifecalc_guest_sid', sessionId, {
+      if (isNew) {
+        blockedResponse.cookies.set('lifecalc_guest_sid', signedCookie, {
           httpOnly: true,
           sameSite: 'lax',
           secure: process.env.NODE_ENV === 'production',
@@ -101,11 +78,8 @@ export async function POST(req: NextRequest) {
       return blockedResponse;
     }
 
-    const newCount = currentSession.count + 1;
-    currentSession.count = newCount;
-    currentSession.lastUsed = Date.now();
-    sessionQuotaStore.set(sessionId, currentSession);
-
+    // Increment persistent quota
+    const { count: newCount } = incrementGuestQuota(guestId);
     const calculationsRemaining = Math.max(0, GUEST_MAX_CALCULATIONS - newCount);
     const quotaReached = newCount >= GUEST_MAX_CALCULATIONS;
 
@@ -118,12 +92,12 @@ export async function POST(req: NextRequest) {
       quotaReached,
     });
 
-    if (isNewSession) {
-      response.cookies.set('lifecalc_guest_sid', sessionId, {
+    if (isNew) {
+      response.cookies.set('lifecalc_guest_sid', signedCookie, {
         httpOnly: true,
         sameSite: 'lax',
         secure: process.env.NODE_ENV === 'production',
-        maxAge: 30 * 24 * 60 * 60, // 30 days
+        maxAge: 30 * 24 * 60 * 60,
         path: '/',
       });
     }
@@ -139,13 +113,9 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   // Query current guest quota status without incrementing count
-  const sessionId = req.cookies.get('lifecalc_guest_sid')?.value;
-  const isAuthed = Boolean(
-    req.cookies.get('lifecalc_auth_session')?.value ||
-    req.cookies.get('sb-access-token')?.value
-  );
+  const authenticatedUser = getUserFromRequest(req);
 
-  if (isAuthed) {
+  if (authenticatedUser) {
     return NextResponse.json({
       isGuest: false,
       calculationsUsed: 0,
@@ -154,14 +124,26 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const currentSession = sessionId ? sessionQuotaStore.get(sessionId) : undefined;
-  const count = currentSession ? currentSession.count : 0;
+  const { guestId, signedCookie, isNew } = getOrCreateGuestId(req);
+  const count = getGuestQuota(guestId);
   const remaining = Math.max(0, GUEST_MAX_CALCULATIONS - count);
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     isGuest: true,
     calculationsUsed: count,
     calculationsRemaining: remaining,
     quotaReached: count >= GUEST_MAX_CALCULATIONS,
   });
+
+  if (isNew) {
+    res.cookies.set('lifecalc_guest_sid', signedCookie, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 30 * 24 * 60 * 60,
+      path: '/',
+    });
+  }
+
+  return res;
 }

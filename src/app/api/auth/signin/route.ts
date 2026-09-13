@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userDatabase, createSessionToken, UserSession } from '@/lib/auth';
+import { findUserByEmail } from '@/lib/db';
+import {
+  verifyPassword,
+  createSessionToken,
+  checkLoginRateLimit,
+  recordFailedLogin,
+  resetLoginAttempts,
+  SafeUser,
+} from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,31 +18,44 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const existing = userDatabase.get(normalizedEmail);
 
-    // If user exists, check password; if demo/local testing, register them automatically if not found
-    let user: UserSession;
-    if (existing) {
-      if (existing.passwordHash !== password) {
-        return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
-      }
-      user = { id: existing.id, email: existing.email, name: existing.name, createdAt: existing.createdAt };
-    } else {
-      // Auto-provision demo account for smooth testability
-      const userId = `usr_${Math.random().toString(36).substring(2, 10)}`;
-      user = {
-        id: userId,
-        email: normalizedEmail,
-        name: normalizedEmail.split('@')[0],
-        createdAt: Date.now(),
-      };
-      userDatabase.set(normalizedEmail, { ...user, passwordHash: password });
+    // Check rate limit for brute-force protection
+    const rateLimit = checkLoginRateLimit(normalizedEmail);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: `Too many failed attempts. Please try again in ${rateLimit.waitSeconds} seconds.` },
+        { status: 429 }
+      );
     }
 
-    const token = createSessionToken(user);
+    const user = findUserByEmail(normalizedEmail);
+    // Strict security: Unknown users must return 401, NEVER auto-provision!
+    if (!user) {
+      recordFailedLogin(normalizedEmail);
+      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    }
+
+    const isValid = verifyPassword(password, user.passwordHash, user.salt);
+    if (!isValid) {
+      recordFailedLogin(normalizedEmail);
+      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    }
+
+    // Reset failed attempts on success
+    resetLoginAttempts(normalizedEmail);
+
+    const safeUser: SafeUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      createdAt: user.createdAt,
+    };
+
+    const { token, expiresAt } = createSessionToken(safeUser);
+
     const res = NextResponse.json({
       success: true,
-      user,
+      user: safeUser,
       message: 'Signed in successfully',
     });
 
@@ -42,12 +63,12 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 30 * 24 * 60 * 60,
+      expires: new Date(expiresAt),
       path: '/',
     });
 
     return res;
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Signin failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal signin error' }, { status: 500 });
   }
 }

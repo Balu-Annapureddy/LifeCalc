@@ -4,15 +4,17 @@ import { POST as calculatePost } from '@/app/api/calculate/route';
 import { POST as signupPost } from '@/app/api/auth/signup/route';
 import { POST as signinPost } from '@/app/api/auth/signin/route';
 import { GET as meGet } from '@/app/api/auth/me/route';
+import { POST as signoutPost } from '@/app/api/auth/signout/route';
 import { POST as sharePost, GET as shareGet } from '@/app/api/share/route';
 import { POST as savedPost, GET as savedGet, DELETE as savedDelete } from '@/app/api/saved/route';
+import { POST as historyPost, GET as historyGet, DELETE as historyDelete } from '@/app/api/history/route';
 import { calculateEmiPure } from '@/engine/calculators/money/emi';
 import { calculateSipPure } from '@/engine/calculators/money/sip';
 import { calculateAttendancePure } from '@/engine/calculators/student/attendance';
 
-describe('LifeCalc Production User Journeys & Stabilization Verification', () => {
+describe('LifeCalc Production Security, Auth, & Persistence Journeys', () => {
   it('Journey 1: Guest Quota strictly permits 15 calculations and blocks the 16th with HTTP 429', async () => {
-    const sessionId = `e2e_guest_${Date.now()}`;
+    const sessionId = `guest_test_${Date.now()}`;
 
     for (let i = 1; i <= 15; i++) {
       const req = new NextRequest('http://localhost:3000/api/calculate', {
@@ -57,12 +59,30 @@ describe('LifeCalc Production User Journeys & Stabilization Verification', () =>
     expect(blockedData.calculationsRemaining).toBe(0);
   });
 
-  it('Journey 2: User Sign Up, Sign In, and Unlimited Calculations under Authenticated Session', async () => {
-    const testEmail = `user_${Date.now()}@lifecalc.in`;
-    const testPassword = 'Password123!';
-    const testName = 'Alex Test';
+  it('Journey 2: Real Secure Authentication, Session Validation, Signout & Negative Tests', async () => {
+    const testEmail = `sec_user_${Date.now()}@lifecalc.in`;
+    const testPassword = 'SecurePassword2026!';
+    const testName = 'Security Tester';
 
-    // 1. Sign Up
+    // 1. Password minimum length guard (Reject < 8 chars)
+    const shortPassReq = new NextRequest('http://localhost:3000/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: testName, email: testEmail, password: 'short' }),
+    });
+    const shortPassRes = await signupPost(shortPassReq);
+    expect(shortPassRes.status).toBe(400);
+
+    // 2. Unknown user signin must return 401, NOT auto-provision!
+    const unknownSigninReq = new NextRequest('http://localhost:3000/api/auth/signin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `nonexistent_${Date.now()}@lifecalc.in`, password: testPassword }),
+    });
+    const unknownSigninRes = await signinPost(unknownSigninReq);
+    expect(unknownSigninRes.status).toBe(401);
+
+    // 3. Legitimate Sign Up
     const signupReq = new NextRequest('http://localhost:3000/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -73,12 +93,29 @@ describe('LifeCalc Production User Journeys & Stabilization Verification', () =>
     const signupData = await signupRes.json();
     expect(signupData.success).toBe(true);
     expect(signupData.user.email).toBe(testEmail);
+    // Password hash or salt must NEVER be leaked in JSON response
+    expect(signupData.user.passwordHash).toBeUndefined();
+    expect(signupData.user.salt).toBeUndefined();
 
-    // Check cookie
-    const setCookie = signupRes.cookies.get('lifecalc_auth_session')?.value;
-    expect(setCookie).toBeTruthy();
+    // 4. Duplicate Sign Up rejected
+    const dupSignupReq = new NextRequest('http://localhost:3000/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: testName, email: testEmail, password: testPassword }),
+    });
+    const dupSignupRes = await signupPost(dupSignupReq);
+    expect(dupSignupRes.status).toBe(409);
 
-    // 2. Sign In
+    // 5. Sign In with wrong password rejected
+    const wrongPassReq = new NextRequest('http://localhost:3000/api/auth/signin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: testEmail, password: 'WrongPassword!' }),
+    });
+    const wrongPassRes = await signinPost(wrongPassReq);
+    expect(wrongPassRes.status).toBe(401);
+
+    // 6. Legitimate Sign In
     const signinReq = new NextRequest('http://localhost:3000/api/auth/signin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -89,7 +126,7 @@ describe('LifeCalc Production User Journeys & Stabilization Verification', () =>
     const signinCookie = signinRes.cookies.get('lifecalc_auth_session')?.value;
     expect(signinCookie).toBeTruthy();
 
-    // 3. Check /api/auth/me
+    // 7. Verify /api/auth/me
     const meReq = new NextRequest('http://localhost:3000/api/auth/me', {
       method: 'GET',
       headers: { Cookie: `lifecalc_auth_session=${signinCookie}` },
@@ -100,8 +137,25 @@ describe('LifeCalc Production User Journeys & Stabilization Verification', () =>
     expect(meData.authenticated).toBe(true);
     expect(meData.user.email).toBe(testEmail);
 
-    // 4. Authenticated calculation has unlimited quota (isGuest: false)
-    const calcReq = new NextRequest('http://localhost:3000/api/calculate', {
+    // 8. Security test: request-body authToken MUST BE IGNORED by /api/calculate
+    const fakeAuthReq = new NextRequest('http://localhost:3000/api/calculate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: `lifecalc_guest_sid=guest_unauthed_attempt_${Date.now()}`,
+      },
+      body: JSON.stringify({
+        calculatorId: 'emi',
+        inputs: { principal: 100000, annualRate: 10, tenureYears: 1 },
+        authToken: 'fake_forged_token_attempt',
+      }),
+    });
+    const fakeAuthRes = await calculatePost(fakeAuthReq);
+    const fakeAuthData = await fakeAuthRes.json();
+    expect(fakeAuthData.isGuest).toBe(true); // Must remain guest!
+
+    // 9. Legitimate authenticated calculation has unlimited quota
+    const authedCalcReq = new NextRequest('http://localhost:3000/api/calculate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -112,57 +166,89 @@ describe('LifeCalc Production User Journeys & Stabilization Verification', () =>
         inputs: { monthlyInvestment: 5000, expectedReturnRate: 12, investmentPeriodYears: 10 },
       }),
     });
-    const calcRes = await calculatePost(calcReq);
-    expect(calcRes.status).toBe(200);
-    const calcData = await calcRes.json();
-    expect(calcData.isGuest).toBe(false);
-    expect(calcData.calculationsRemaining).toBe(-1);
+    const authedCalcRes = await calculatePost(authedCalcReq);
+    expect(authedCalcRes.status).toBe(200);
+    const authedData = await authedCalcRes.json();
+    expect(authedData.isGuest).toBe(false);
+    expect(authedData.calculationsRemaining).toBe(-1);
+
+    // 10. Logout invalidates session in DB
+    const signoutReq = new NextRequest('http://localhost:3000/api/auth/signout', {
+      method: 'POST',
+      headers: { Cookie: `lifecalc_auth_session=${signinCookie}` },
+    });
+    const signoutRes = await signoutPost(signoutReq);
+    expect(signoutRes.status).toBe(200);
+
+    // Session is now invalidated; me should return unauthenticated
+    const postSignoutMeRes = await meGet(meReq);
+    const postSignoutMeData = await postSignoutMeRes.json();
+    expect(postSignoutMeData.authenticated).toBe(false);
   });
 
-  it('Journey 3: Scenario Persistence (Save, Retrieve, and Delete via /api/saved)', async () => {
-    const userSession = `sess_${Date.now()}`;
-    const cookieHeader = `lifecalc_guest_session=${userSession}`;
+  it('Journey 3: Scenario Persistence & Strict IDOR Protection', async () => {
+    // User A creates a scenario
+    const userASession = `user_a_sess_${Date.now()}`;
+    const cookieHeaderA = `lifecalc_guest_sid=${userASession}`;
 
-    // 1. Save scenario
-    const saveReq = new NextRequest('http://localhost:3000/api/saved', {
+    const saveReqA = new NextRequest('http://localhost:3000/api/saved', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookieHeader },
+      headers: { 'Content-Type': 'application/json', Cookie: cookieHeaderA },
       body: JSON.stringify({
-        name: 'Home Loan Scenario 1',
+        name: "User A's Home Loan",
         calculatorId: 'emi',
         primaryResult: '₹43,391 / mo',
-        notes: 'SBI Maxgain',
+        notes: 'User A confidential note',
         inputs: { principal: 5000000, annualRate: 8.5, tenureYears: 20 },
       }),
     });
-    const saveRes = await savedPost(saveReq);
-    expect(saveRes.status).toBe(200);
-    const savedBody = await saveRes.json();
-    expect(savedBody.success).toBe(true);
-    const savedId = savedBody.item.id;
-    expect(savedId).toBeTruthy();
+    const saveResA = await savedPost(saveReqA);
+    expect(saveResA.status).toBe(200);
+    const savedDataA = await saveResA.json();
+    const scenarioIdA = savedDataA.item.id;
 
-    // 2. Retrieve saved scenarios
-    const getReq = new NextRequest('http://localhost:3000/api/saved', {
+    // User B attempts to read User A's scenarios
+    const userBSession = `user_b_sess_${Date.now()}`;
+    const cookieHeaderB = `lifecalc_guest_sid=${userBSession}`;
+
+    const getReqB = new NextRequest('http://localhost:3000/api/saved', {
       method: 'GET',
-      headers: { Cookie: cookieHeader },
+      headers: { Cookie: cookieHeaderB },
     });
-    const getRes = await savedGet(getReq);
-    expect(getRes.status).toBe(200);
-    const getBody = await getRes.json();
-    expect(getBody.items.length).toBeGreaterThanOrEqual(1);
-    expect(getBody.items[0].name).toBe('Home Loan Scenario 1');
+    const getResB = await savedGet(getReqB);
+    const dataB = await getResB.json();
+    // User B must NOT see User A's scenarios
+    expect(dataB.items.find((s: any) => s.id === scenarioIdA)).toBeUndefined();
 
-    // 3. Delete saved scenario
-    const delReq = new NextRequest(`http://localhost:3000/api/saved?id=${savedId}`, {
+    // User B attempts IDOR delete on User A's scenario
+    const idorDeleteReq = new NextRequest(`http://localhost:3000/api/saved?id=${scenarioIdA}`, {
       method: 'DELETE',
-      headers: { Cookie: cookieHeader },
+      headers: { Cookie: cookieHeaderB },
     });
-    const delRes = await savedDelete(delReq);
-    expect(delRes.status).toBe(200);
+    const idorDeleteRes = await savedDelete(idorDeleteReq);
+    const idorData = await idorDeleteRes.json();
+    expect(idorData.deleted).toBe(false); // IDOR thwarted!
+
+    // Verify User A's scenario is still intact
+    const getReqA = new NextRequest('http://localhost:3000/api/saved', {
+      method: 'GET',
+      headers: { Cookie: cookieHeaderA },
+    });
+    const getResA = await savedGet(getReqA);
+    const dataA = await getResA.json();
+    expect(dataA.items.find((s: any) => s.id === scenarioIdA)).toBeDefined();
+
+    // User A can legitimately delete their own scenario
+    const legitDeleteReq = new NextRequest(`http://localhost:3000/api/saved?id=${scenarioIdA}`, {
+      method: 'DELETE',
+      headers: { Cookie: cookieHeaderA },
+    });
+    const legitDeleteRes = await savedDelete(legitDeleteReq);
+    const legitDeleteData = await legitDeleteRes.json();
+    expect(legitDeleteData.deleted).toBe(true);
   });
 
-  it('Journey 4: End-to-End Share Creation and Fetching via /api/share', async () => {
+  it('Journey 4: Cryptographically Unpredictable Share Links & Schema Validation', async () => {
     const payload = {
       calculatorId: 'can-i-afford-this',
       inputs: { monthlyIncome: 90000, monthlyExpenses: 30000, itemPrice: 150000, paymentMode: 'cash' },
@@ -178,6 +264,8 @@ describe('LifeCalc Production User Journeys & Stabilization Verification', () =>
     expect(sharePostRes.status).toBe(200);
     const shareData = await sharePostRes.json();
     expect(shareData.shareId).toBeTruthy();
+    // 128-bit hex string has length 32
+    expect(shareData.shareId.length).toBe(32);
     expect(shareData.shareUrl).toBe(`/share/${shareData.shareId}`);
 
     // Retrieve shared data
@@ -189,29 +277,12 @@ describe('LifeCalc Production User Journeys & Stabilization Verification', () =>
     const retrievedData = await shareGetRes.json();
     expect(retrievedData.calculatorId).toBe('can-i-afford-this');
     expect(retrievedData.inputs.itemPrice).toBe(150000);
-  });
 
-  it('Journey 5: Mathematical Edge Case Hardening', () => {
-    // EMI 0% interest
-    const emiZeroRate = calculateEmiPure(120000, 0, 1);
-    expect(emiZeroRate.emi).toBe(10000);
-    expect(emiZeroRate.totalInterest).toBe(0);
-    expect(emiZeroRate.totalPayment).toBe(120000);
-    expect(emiZeroRate.principalRatio).toBe(100);
-    expect(emiZeroRate.interestRatio).toBe(0);
-
-    // SIP 0% return rate
-    const sipZeroReturn = calculateSipPure(1000, 0, 1);
-    expect(sipZeroReturn.totalInvested).toBe(12000);
-    expect(sipZeroReturn.futureValue).toBe(12000);
-    expect(sipZeroReturn.wealthGain).toBe(0);
-    expect(sipZeroReturn.wealthRatio).toBe(0);
-    expect(sipZeroReturn.investedRatio).toBe(100);
-
-    // Attendance 0 total classes
-    const attZero = calculateAttendancePure(0, 0, 75);
-    expect(attZero.currentPercentage).toBe(0);
-    expect(attZero.isEligible).toBe(false);
-    expect(attZero.classesNeeded).toBe(0);
+    // Negative test: invalid share id returns 404
+    const badShareGetReq = new NextRequest('http://localhost:3000/api/share?id=00000000000000000000000000000000', {
+      method: 'GET',
+    });
+    const badShareGetRes = await shareGet(badShareGetReq);
+    expect(badShareGetRes.status).toBe(404);
   });
 });

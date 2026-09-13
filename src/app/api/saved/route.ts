@@ -1,34 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
+import { getOrCreateGuestId } from '@/lib/guest';
+import {
+  getSavedScenariosByUserId,
+  insertSavedScenario,
+  deleteSavedScenarioById,
+} from '@/lib/db';
 
-export interface SavedItem {
-  id: string;
-  name: string;
-  calculatorId: string;
-  primaryResult: string;
-  notes?: string;
-  updatedAt: string;
-  inputs: Record<string, any>;
-}
-
-const savedStore = new Map<string, SavedItem[]>();
-
-function getSessionKey(req: NextRequest): string {
+function getEffectiveUserId(req: NextRequest): string {
   const user = getUserFromRequest(req);
   if (user) return user.id;
-  const guestSession = req.cookies.get('lifecalc_guest_session')?.value || 'guest_default';
-  return guestSession;
+  const { guestId } = getOrCreateGuestId(req);
+  return guestId;
 }
 
 export async function GET(req: NextRequest) {
-  const key = getSessionKey(req);
-  const items = savedStore.get(key) || [];
-  return NextResponse.json({ items });
+  try {
+    const userId = getEffectiveUserId(req);
+    const items = getSavedScenariosByUserId(userId);
+    return NextResponse.json({ items });
+  } catch (err: any) {
+    return NextResponse.json({ error: 'Failed to retrieve saved scenarios' }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const key = getSessionKey(req);
+    const userId = getEffectiveUserId(req);
     const body = await req.json();
     const { name, calculatorId, primaryResult, notes, inputs } = body;
 
@@ -36,36 +34,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing name, calculatorId, or inputs' }, { status: 400 });
     }
 
-    const newItem: SavedItem = {
-      id: `save_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      name,
+    const newItem = insertSavedScenario({
+      userId,
+      name: name.trim(),
       calculatorId,
       primaryResult: primaryResult || '',
-      notes: notes || '',
-      updatedAt: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }),
+      notes: notes ? notes.trim() : '',
       inputs,
-    };
-
-    const current = savedStore.get(key) || [];
-    savedStore.set(key, [newItem, ...current]);
+    });
 
     return NextResponse.json({ success: true, item: newItem });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Failed to bookmark scenario' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to save scenario' }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  const key = getSessionKey(req);
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get('id');
+  try {
+    const userId = getEffectiveUserId(req);
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
 
-  if (id) {
-    const current = savedStore.get(key) || [];
-    savedStore.set(key, current.filter(item => item.id !== id));
-  } else {
-    savedStore.delete(key);
+    if (!id) {
+      return NextResponse.json({ error: 'Missing scenario id' }, { status: 400 });
+    }
+
+    // Strict IDOR protection: only deletes if the record belongs to this userId
+    const deleted = deleteSavedScenarioById(id, userId);
+    return NextResponse.json({ success: true, deleted });
+  } catch (err: any) {
+    return NextResponse.json({ error: 'Failed to delete scenario' }, { status: 500 });
   }
-
-  return NextResponse.json({ success: true });
 }

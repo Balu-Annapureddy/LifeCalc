@@ -67,13 +67,32 @@ describe('Tamper-Proof Guest Quota Suite', () => {
   });
 
   it('allows unlimited calculations for authenticated users', async () => {
+    const { insertUser } = await import('@/lib/db');
+    const { createSessionToken } = await import('@/lib/auth');
+    insertUser({
+      id: 'test_user_quota_123',
+      email: 'quota_tester@lifecalc.in',
+      name: 'Quota Tester',
+      passwordHash: 'dummy',
+      salt: 'dummy',
+      createdAt: Date.now(),
+    });
+    const { token } = createSessionToken({
+      id: 'test_user_quota_123',
+      email: 'quota_tester@lifecalc.in',
+      name: 'Quota Tester',
+      createdAt: Date.now(),
+    });
+
     const req = new NextRequest('http://localhost:3000/api/calculate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: `lifecalc_auth_session=${token}`,
+      },
       body: JSON.stringify({
         calculatorId: 'emi',
         inputs: { principal: 1000000, annualRate: 9, tenureYears: 5 },
-        authToken: 'valid_user_session_token',
       }),
     });
 

@@ -6,6 +6,10 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+data/*.json
+data/*.tmp
 
 # next.js
 /.next/

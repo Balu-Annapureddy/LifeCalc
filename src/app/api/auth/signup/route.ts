@@ -1,37 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { userDatabase, createSessionToken, UserSession } from '@/lib/auth';
+import crypto from 'crypto';
+import { findUserByEmail, insertUser } from '@/lib/db';
+import { hashPassword, createSessionToken, SafeUser } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password, name } = await req.json();
+    const body = await req.json();
+    const { email, password, name } = body;
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: 'Missing name, email, or password' }, { status: 400 });
     }
 
+    if (typeof password !== 'string' || password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters long' }, { status: 400 });
+    }
+
     const normalizedEmail = email.toLowerCase().trim();
-    if (userDatabase.has(normalizedEmail)) {
+    const existing = findUserByEmail(normalizedEmail);
+    if (existing) {
       return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
     }
 
-    const userId = `usr_${Math.random().toString(36).substring(2, 10)}`;
-    const user: UserSession = {
+    const { hash, salt } = hashPassword(password);
+    const userId = `usr_${crypto.randomBytes(12).toString('hex')}`;
+    const safeUser: SafeUser = {
       id: userId,
       email: normalizedEmail,
       name: name.trim(),
       createdAt: Date.now(),
     };
 
-    userDatabase.set(normalizedEmail, {
-      ...user,
-      passwordHash: password, // In production: bcrypt.hash
+    insertUser({
+      ...safeUser,
+      passwordHash: hash,
+      salt,
     });
 
-    const token = createSessionToken(user);
+    const { token, expiresAt } = createSessionToken(safeUser);
 
     const res = NextResponse.json({
       success: true,
-      user,
+      user: safeUser,
       message: 'Account created successfully',
     });
 
@@ -39,12 +49,12 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
+      expires: new Date(expiresAt),
       path: '/',
     });
 
     return res;
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Signup failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal signup error' }, { status: 500 });
   }
 }

@@ -27,8 +27,7 @@ export default function SignInPage() {
       if (!res.ok) {
         throw new Error(data.error || 'Failed to sign in');
       }
-      router.push('/');
-      router.refresh();
+      window.location.href = '/';
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     } finally {

@@ -39,9 +39,9 @@ export default function SharePage({ params, searchParams }: SharePageProps) {
             <Share2 className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-900">
+            <h1 className="text-base sm:text-lg font-bold text-slate-900">
               Shared Calculation: {calc.name}
-            </h2>
+            </h1>
             <p className="text-xs text-slate-600">
               {shared
                 ? 'This scenario was saved and shared with you. You can inspect the verified results or adjust values below.'
