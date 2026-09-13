@@ -1,67 +1,139 @@
-// LifeCalc Service Worker for Offline PWA Capabilities
-const CACHE_NAME = 'lifecalc-cache-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-];
+// LifeCalc Service Worker — Production-Safe Caching Strategy
+//
+// Caching tiers:
+//   1. API routes          → Network Only (never cached)
+//   2. /_next/static/      → Cache First  (content-hashed, immutable)
+//   3. HTML navigation     → Network First (always fresh when online; cached for offline fallback)
+//   4. Other static assets → Network First with cache fallback
+//
+// CACHE_VERSION must be updated with each deployment that changes the app shell.
+// It is embedded at build time via the sw.js source itself.
+// Changing this string causes the browser to install a new SW and the activate
+// handler to evict all caches from previous versions.
+const CACHE_VERSION = 'v3';
+const STATIC_CACHE  = `lifecalc-static-${CACHE_VERSION}`;  // for /_next/static/ immutable assets
+const NAV_CACHE     = `lifecalc-nav-${CACHE_VERSION}`;     // for HTML navigation fallback
 
+// Maximum age for a cached navigation response before it is considered stale
+// for offline purposes.  Does not affect online behavior (Network First always
+// fetches from the network when connectivity is available).
+const NAV_CACHE_MAX_ENTRIES = 30;
+
+// ─── Install ───────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
+  // Take control immediately; do not wait for old SW clients to close.
   self.skipWaiting();
+  // Warm the navigation cache with the app shell root.
+  event.waitUntil(
+    caches.open(NAV_CACHE).then(cache => cache.add('/'))
+  );
 });
 
+// ─── Activate ──────────────────────────────────────────────────────────────
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(name => {
-          if (name !== CACHE_NAME) {
-            return caches.delete(name);
+    caches.keys().then(keys =>
+      Promise.all(
+        keys.map(key => {
+          // Delete any cache that does not belong to the current CACHE_VERSION.
+          // This evicts all stale HTML and static assets from previous deployments.
+          if (key !== STATIC_CACHE && key !== NAV_CACHE) {
+            return caches.delete(key);
           }
         })
-      );
-    })
+      )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
+// ─── Fetch ─────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', event => {
-  // Only handle GET requests
+  // Only intercept GET requests on the same origin.
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
 
-  // Do not cache API routes
-  if (url.pathname.startsWith('/api/')) return;
+  // ── Tier 1: API routes — Network Only ──────────────────────────────────
+  // Never cache API responses; always go to the network.
+  // This includes auth endpoints, OAuth, session checks, etc.
+  if (url.pathname.startsWith('/api/')) {
+    return; // Let the browser handle it natively (no respondWith)
+  }
 
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-
-      return fetch(event.request)
-        .then(response => {
-          // Cache successful navigation and asset requests
-          if (!response || response.status !== 200 || response.type !== 'basic') {
+  // ── Tier 2: Immutable static assets — Cache First ──────────────────────
+  // Next.js content-hashes every file under /_next/static/.
+  // The URL itself changes when the content changes, so Cache First is safe.
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then(cache =>
+        cache.match(event.request).then(cached => {
+          if (cached) return cached;
+          return fetch(event.request).then(response => {
+            if (response && response.status === 200) {
+              cache.put(event.request, response.clone());
+            }
             return response;
-          }
-
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseToCache);
           });
-
-          return response;
         })
-        .catch(() => {
-          // Offline fallback
-          return caches.match('/');
-        });
-    })
+      )
+    );
+    return;
+  }
+
+  // ── Tier 3: HTML navigation — Network First ─────────────────────────────
+  // Always attempt the network first so users always receive the current
+  // deployed HTML.  Only fall back to the cache when offline.
+  const isNavigation =
+    event.request.mode === 'navigate' ||
+    event.request.headers.get('accept')?.includes('text/html');
+
+  if (isNavigation) {
+    event.respondWith(networkFirstNav(event.request));
+    return;
+  }
+
+  // ── Tier 4: Other same-origin GET (icons, manifest, fonts) ─────────────
+  // Network First with a cache fallback so these work offline.
+  event.respondWith(
+    fetch(event.request)
+      .then(response => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(NAV_CACHE).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
+
+// ─── Network First for navigation requests ─────────────────────────────────
+async function networkFirstNav(request) {
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse && networkResponse.status === 200) {
+      // Update the cache with the freshly fetched HTML.
+      const cache = await caches.open(NAV_CACHE);
+      cache.put(request, networkResponse.clone());
+      await trimCache(cache, NAV_CACHE_MAX_ENTRIES);
+    }
+    return networkResponse;
+  } catch (_) {
+    // Network unavailable — serve the last cached HTML for this URL.
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    // Last resort: serve the cached root shell.
+    return caches.match('/');
+  }
+}
+
+// ─── Cache size trimming ───────────────────────────────────────────────────
+// Prevents the navigation cache growing without bound on sites with many pages.
+async function trimCache(cache, maxEntries) {
+  const keys = await cache.keys();
+  if (keys.length > maxEntries) {
+    const toDelete = keys.slice(0, keys.length - maxEntries);
+    await Promise.all(toDelete.map(k => cache.delete(k)));
+  }
+}

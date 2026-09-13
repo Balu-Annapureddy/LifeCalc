@@ -8,6 +8,15 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // Service worker must never be served from HTTP cache.
+        // Without this the browser can serve a stale sw.js for up to 24 h
+        // (the HTTP spec cap for SW script caching), delaying new deployments.
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-store, max-age=0, must-revalidate' },
+        ],
+      },
+      {
         source: '/(.*)',
         headers: [
           { key: 'X-Frame-Options', value: 'DENY' },

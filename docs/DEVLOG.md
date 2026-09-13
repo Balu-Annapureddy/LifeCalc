@@ -401,3 +401,37 @@ Independent code review of commit `2de51ed` surfaced one functional gap (quota n
 - npm run build: 52 static and dynamic Next.js routes compiled cleanly with 0 errors.
 - npm run test:e2e (Playwright): 4/4 end-to-end browser tests passed in Chromium (incl. previously failing Journey 2 with signup, email verify screen, and header auth).
 - Commit: `0aacb1e` pushed to `origin/main`.
+
+---
+
+## [Entry 013] — 2026-09-13: Production PWA Caching & Versioning Remediation
+
+### Problem & Observed Behavior
+On production (`https://life-calc-sable.vercel.app`), opening the site in a fresh browser session repeatedly loaded an obsolete application version. Pressing manual refresh served the latest version, but closing and reopening reverted to the old version.
+
+### Root Cause
+1. **Cache-First HTML Interception**: In `public/sw.js`, the fetch event handler applied a blanket "Cache First" strategy to all non-API GET requests, including HTML navigation requests (`mode: 'navigate'` and `accept: text/html`). Once cached, subsequent browser visits served stale HTML directly from the SW cache rather than consulting the network.
+2. **Unversioned Static Cache Name**: The cache name was hardcoded as `lifecalc-cache-v1`. On subsequent deployments, `activate` only deleted caches with different names, leaving stale HTML inside `lifecalc-cache-v1` indefinitely.
+3. **Missing HTTP Cache-Control on Service Worker**: `/sw.js` had no explicit `Cache-Control` header in `next.config.js`, allowing browsers to cache the SW script itself under standard HTTP caching semantics.
+
+### Architecture & Fix Implemented
+1. **Four-Tier Service Worker Strategy (`public/sw.js`)**:
+   - **Tier 1 (API Routes)**: Network Only (`/api/*` requests pass directly to the network without SW interception; guarantees auth, session, and calculation APIs are never cached).
+   - **Tier 2 (Hashed Static Assets)**: Cache First (`/_next/static/*` assets are content-addressed and immutable; cached in `lifecalc-static-<CACHE_VERSION>`).
+   - **Tier 3 (HTML Navigation)**: Network First (`mode: 'navigate'` or `accept: text/html` always fetches from network first so users immediately receive newly deployed HTML; on network failure/offline, falls back safely to cached HTML).
+   - **Tier 4 (Same-origin Assets)**: Network First with cache fallback (manifest, icons, fonts).
+2. **Dynamic Cache Invalidation**:
+   - Cache names use `CACHE_VERSION = 'v3'` (`lifecalc-static-v3` and `lifecalc-nav-v3`).
+   - `activate` event actively deletes all previous cache versions.
+   - `skipWaiting()` and `clients.claim()` ensure new SW versions immediately control clients upon installation.
+3. **HTTP Cache Invalidation for Service Worker (`next.config.js`)**:
+   - Configured `/sw.js` with `Cache-Control: no-store, max-age=0, must-revalidate` so browsers always fetch the freshest SW script on each check.
+4. **Offline Capability Preserved**:
+   - PWA manifest (`public/manifest.json`) and standalone installability remain intact.
+   - Offline fallback serves previously-cached HTML or root shell (`/`) if network drops.
+
+### Verification Status
+- `npm run typecheck`: 0 TypeScript errors.
+- `npm test` (Vitest): 92/92 tests passing across 10 test suites (including 10 new tests in `src/tests/service-worker.test.ts`).
+- `npm run build`: 52 static and dynamic Next.js routes compiled cleanly with 0 errors.
+- `npm run test:e2e` (Playwright): 4/4 end-to-end browser tests passed in Chromium.
