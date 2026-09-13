@@ -1,5 +1,6 @@
-import crypto from 'crypto';
+﻿import crypto from 'crypto';
 import { NextRequest } from 'next/server';
+import { config } from './config';
 import {
   findUserByEmail,
   findUserById,
@@ -7,10 +8,12 @@ import {
   insertSession,
   findSession,
   deleteSessionByHash,
+  getRateLimitRecord,
+  updateRateLimitRecord,
+  clearRateLimitRecord,
   UserRecord,
 } from './db';
 
-const SESSION_SECRET = process.env.SESSION_SECRET || 'lifecalc_secure_production_hmac_secret_2026_entropy_key';
 const SESSION_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 export interface SafeUser {
@@ -60,7 +63,7 @@ export function createSessionToken(user: SafeUser): { token: string; expiresAt: 
   const payloadB64 = Buffer.from(payload).toString('base64url');
 
   const signature = crypto
-    .createHmac('sha256', SESSION_SECRET)
+    .createHmac('sha256', config.sessionSecret)
     .update(`${sessionId}.${payloadB64}`)
     .digest('base64url');
 
@@ -89,7 +92,7 @@ export function verifySessionToken(token: string): SafeUser | null {
 
   // 1. Verify HMAC Signature
   const expectedSig = crypto
-    .createHmac('sha256', SESSION_SECRET)
+    .createHmac('sha256', config.sessionSecret)
     .update(`${sessionId}.${payloadB64}`)
     .digest('base64url');
 
@@ -147,12 +150,10 @@ export function getUserFromRequest(req: NextRequest): SafeUser | null {
   return verifySessionToken(cookie);
 }
 
-// In-memory rate limiter for sign-in brute force defense
-const loginAttempts = new Map<string, { attempts: number; lockUntil: number }>();
-
+// Persistent shared rate limiter for multi-process brute force defense
 export function checkLoginRateLimit(key: string): { allowed: boolean; waitSeconds?: number } {
   const now = Date.now();
-  const record = loginAttempts.get(key);
+  const record = getRateLimitRecord(key);
 
   if (record && record.lockUntil > now) {
     const waitSeconds = Math.ceil((record.lockUntil - now) / 1000);
@@ -164,17 +165,18 @@ export function checkLoginRateLimit(key: string): { allowed: boolean; waitSecond
 
 export function recordFailedLogin(key: string): void {
   const now = Date.now();
-  const record = loginAttempts.get(key) || { attempts: 0, lockUntil: 0 };
-  record.attempts += 1;
+  const record = getRateLimitRecord(key) || { attempts: 0, lockUntil: 0 };
+  const newAttempts = record.attempts + 1;
+  let lockUntil = record.lockUntil;
 
   // Lock out for 15 minutes after 5 failed attempts
-  if (record.attempts >= 5) {
-    record.lockUntil = now + 15 * 60 * 1000;
+  if (newAttempts >= 5) {
+    lockUntil = now + 15 * 60 * 1000;
   }
 
-  loginAttempts.set(key, record);
+  updateRateLimitRecord(key, newAttempts, lockUntil);
 }
 
 export function resetLoginAttempts(key: string): void {
-  loginAttempts.delete(key);
+  clearRateLimitRecord(key);
 }

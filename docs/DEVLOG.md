@@ -177,3 +177,29 @@
 
 
 
+
+
+## [Entry 006] — 2026-09-13: Production Infrastructure Hardening & Zero-Fallback Security
+
+### What Was Audited & Hardened
+1. **Zero Secret Fallbacks / Fail-Closed Startup (`src/lib/config.ts`)**:
+   - Eliminated all hardcoded cryptographic secret fallbacks in `src/lib/auth.ts` and `src/lib/guest.ts`.
+   - Created a strict configuration loader `src/lib/config.ts` enforcing distinct keys: `SESSION_SECRET` (session signatures) and `GUEST_QUOTA_SECRET` (guest tracking cookie signatures).
+   - In production runtime, the application strictly fails closed (throws fatal error refusing to start) if either secret is missing or under 32 characters.
+   - Added `.env.example` documenting required configuration for deployments.
+2. **Multi-Process Atomic Database & Race-Free Guest Quotas (`src/lib/db.ts`)**:
+   - Implemented an atomic process lock (`data/lifecalc.lock`) with mutual exclusion (`wx` flag) and stale lock eviction to ensure concurrent requests and multiple Node processes do not suffer lost updates.
+   - Atomic read-modify-write transactions for guest quotas, preventing race conditions.
+   - Added `data/schema.sql` defining production Postgres / Supabase schema with atomic upsert statements (`ON CONFLICT (guest_id) DO UPDATE SET count = guest_quotas.count + 1`) and Row Level Security (RLS) policies.
+3. **Persistent Shared Rate Limiting (`src/lib/db.ts`, `src/lib/auth.ts`)**:
+   - Replaced process-local `Map` for authentication rate limiting with durable store in database (`rateLimits` / `auth_rate_limits`), ensuring brute force protection holds across load-balanced multi-instance clusters.
+4. **Enhanced Playwright UI Quota Test (`e2e/lifecalc.spec.ts`)**:
+   - Strengthened Guest Journey test: performs genuine interactive form input typing, clicks "Calculate & Verify", asserts reactive DOM updates, verifies the friendly Guest Quota Conversion Prompt banner, and confirms navigation into the sign-in flow.
+5. **CI Pipeline & Environment Secrets (`.github/workflows/ci.yml`, `playwright.config.ts`)**:
+   - Configured CI workflow and Playwright webServer with strong, explicit test environment secrets to validate production build behavior cleanly.
+
+### Verification Status
+- `npm run typecheck`: 0 TypeScript errors.
+- `npm test`: 52 passed across 6 test suites (100% pass rate).
+- `npm run build`: Compiled with 42 static & dynamic routes.
+- `npm run test:e2e`: 4/4 Playwright browser tests passed in Chromium.

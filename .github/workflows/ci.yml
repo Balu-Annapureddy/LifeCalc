@@ -9,6 +9,9 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET || 'lifecalc_ci_environment_session_secret_32_characters_long' }}
+      GUEST_QUOTA_SECRET: ${{ secrets.GUEST_QUOTA_SECRET || 'lifecalc_ci_environment_guest_secret_32_characters_long' }}
 
     steps:
       - name: Checkout repository

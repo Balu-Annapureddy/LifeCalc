@@ -10,6 +10,7 @@
 /playwright-report/
 data/*.json
 data/*.tmp
+data/*.lock
 
 # next.js
 /.next/

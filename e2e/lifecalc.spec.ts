@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('LifeCalc Browser E2E Test Suite', () => {
-  test('1. Guest Journey: calculation, quota banner after 15, and sign-in path', async ({ page }) => {
+  test('1. Guest Journey: interactive UI calculation, quota banner after 15, and sign-in path', async ({ page }) => {
     // Navigate to EMI calculator
     await page.goto('/calculators/money/emi');
     await expect(page.locator('h1')).toContainText('EMI Calculator');
@@ -9,12 +9,21 @@ test.describe('LifeCalc Browser E2E Test Suite', () => {
     // Verify initial primary result is visible
     await expect(page.locator('text=Monthly EMI').first()).toBeVisible();
 
-    // Trigger calculations by modifying principal input
+    // Verify form input and action button exist
     const principalInput = page.locator('input[type="number"]').first();
     await expect(principalInput).toBeVisible();
+    const calculateBtn = page.locator('button:has-text("Calculate & Verify")');
+    await expect(calculateBtn).toBeVisible();
 
-    // Simulate calculations up to quota limit using API with the browser's context
-    for (let i = 1; i <= 15; i++) {
+    // Perform interactive UI calculations
+    for (let i = 1; i <= 3; i++) {
+      await principalInput.fill(`${1000000 + i * 50000}`);
+      await calculateBtn.click();
+      await page.waitForTimeout(100);
+    }
+
+    // Complete calculations 4 through 15 using context fetch
+    for (let i = 4; i <= 15; i++) {
       await page.evaluate(async (count) => {
         await fetch('/api/calculate', {
           method: 'POST',
@@ -27,17 +36,22 @@ test.describe('LifeCalc Browser E2E Test Suite', () => {
       }, i);
     }
 
-    // Now attempt the 16th calculation in the UI
-    await principalInput.fill('2000000');
-    await principalInput.blur();
+    // Now trigger the 15th/16th calculation through the interactive UI button
+    await principalInput.fill('2500000');
+    await calculateBtn.click();
 
-    // Verify quota alert / sign-in invitation is visible
-    await page.waitForTimeout(1000);
-    await page.reload();
+    // Assert that the friendly Guest Quota Conversion Prompt is rendered directly in the UI
+    const quotaBanner = page.locator('text=You’ve completed your 15 free guest calculations!');
+    await expect(quotaBanner).toBeVisible({ timeout: 5000 });
 
-    // Check that signin path is readily accessible
-    const signInLink = page.locator('a[href="/signin"]').first();
-    await expect(signInLink).toBeVisible();
+    // Verify signin link inside the quota prompt is accessible
+    const promptSignInBtn = page.locator('a[href="/signin"]:has-text("Sign in")').first();
+    await expect(promptSignInBtn).toBeVisible();
+
+    // Click through to verify navigation works seamlessly
+    await promptSignInBtn.click();
+    await expect(page).toHaveURL(/.*\/signin/);
+    await expect(page.locator('h1')).toContainText('Welcome back to LifeCalc');
   });
 
   test('2. Authentication Journey: signup, signout, invalid password, signin, and authenticated session', async ({ page }) => {

@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+﻿import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
@@ -25,5 +25,9 @@ export default defineConfig({
     url: 'http://127.0.0.1:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
+    env: {
+      SESSION_SECRET: 'test_lifecalc_secure_production_hmac_secret_2026_entropy_key_32chars',
+      GUEST_QUOTA_SECRET: 'test_lifecalc_secure_guest_quota_salt_key_2026_entropy_32chars',
+    },
   },
 });

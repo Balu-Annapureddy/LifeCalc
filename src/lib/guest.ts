@@ -1,10 +1,9 @@
 import crypto from 'crypto';
 import { NextRequest } from 'next/server';
-
-const GUEST_SECRET = process.env.SESSION_SECRET || 'lifecalc_secure_guest_quota_salt_key_2026';
+import { config } from './config';
 
 export function signGuestId(guestId: string): string {
-  const signature = crypto.createHmac('sha256', GUEST_SECRET).update(guestId).digest('base64url');
+  const signature = crypto.createHmac('sha256', config.guestQuotaSecret).update(guestId).digest('base64url');
   return `${guestId}.${signature}`;
 }
 
@@ -24,7 +23,7 @@ export function verifyGuestId(rawToken: string | undefined): string | null {
   if (parts.length !== 2) return null;
 
   const [guestId, providedSig] = parts;
-  const expectedSig = crypto.createHmac('sha256', GUEST_SECRET).update(guestId).digest('base64url');
+  const expectedSig = crypto.createHmac('sha256', config.guestQuotaSecret).update(guestId).digest('base64url');
 
   try {
     const provBuf = Buffer.from(providedSig);
