@@ -3,8 +3,8 @@ import { CategoryMeta, CalculatorCategory } from './types';
 export const CATEGORIES: Record<CalculatorCategory, CategoryMeta> = {
   money: {
     id: 'money',
-    name: 'Money & Loans',
-    description: 'EMIs, loans, investments, salary in-hand, tax estimates, and wealth planning.',
+    name: 'Money & Everyday Expenses',
+    description: 'Everyday costs, bill splitting, discounts, GST, loans & EMI, investments, and salary in-hand.',
     iconName: 'IndianRupee',
     color: '#2563eb',
   },
@@ -24,24 +24,10 @@ export const CATEGORIES: Record<CalculatorCategory, CategoryMeta> = {
   },
   time: {
     id: 'time',
-    name: 'Time & Dates',
-    description: 'Age calculator, date differences, working days, and countdown milestones.',
+    name: 'Age & Life',
+    description: 'Exact age calculator, lifespan milestones, and birthday countdowns.',
     iconName: 'Clock',
     color: '#d97706',
-  },
-  technology: {
-    id: 'technology',
-    name: 'Technology & Data',
-    description: 'Download/upload time, internet speed, storage capacity, and data usage.',
-    iconName: 'Cpu',
-    color: '#0891b2',
-  },
-  everyday: {
-    id: 'everyday',
-    name: 'Everyday Calculations',
-    description: 'Fuel cost, mileage, bill split, tip, unit conversions, and percentages.',
-    iconName: 'Calculator',
-    color: '#4f46e5',
   },
 };
 

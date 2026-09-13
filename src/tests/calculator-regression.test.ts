@@ -13,8 +13,10 @@ import { calculateAgePure } from '@/engine/calculators/time/age';
 import { calculateFuelCostPure } from '@/engine/calculators/everyday/fuel-cost';
 import { calculateEmiVsCashPure } from '@/engine/calculators/buying/emi-vs-cash';
 import { calculateOwnershipCostPure } from '@/engine/calculators/buying/total-ownership-cost';
+import { calculateBillSplitPure } from '@/engine/calculators/money/bill-split';
+import { calculateDiscountPure } from '@/engine/calculators/money/discount';
 
-describe('Calculator Integrity & Boundary Regression Suite (All 13 Calculators)', () => {
+describe('Calculator Integrity & Boundary Regression Suite (All 15 Calculators)', () => {
   it('1. EMI: Boundary and zero-rate loan calculations', () => {
     // 0% interest
     const zeroRate = calculateEmiPure(60000, 0, 1);
@@ -208,9 +210,26 @@ describe('Calculator Integrity & Boundary Regression Suite (All 13 Calculators)'
     expect(trip.costPerPerson).toBe(833);
   });
 
-  it('Registry completeness: all 13 calculators are registered with valid metadata and schemas', () => {
+  it('14. Bill Split: Group dining with tip and additional charges', () => {
+    const split = calculateBillSplitPure(3000, 5, 10, 100);
+    expect(split.tipAmount).toBe(300);
+    expect(split.grandTotal).toBe(3400);
+    expect(split.perPerson).toBe(680);
+    expect(split.perPersonTip).toBe(60);
+  });
+
+  it('15. Discount: Stacked coupon and tax calculation', () => {
+    const disc = calculateDiscountPure(2000, 20, 10, 5);
+    // 2000 - 400 = 1600; 1600 - 160 = 1440; tax 5% of 1440 = 72; total = 1512
+    expect(disc.discountedPrice).toBe(1440);
+    expect(disc.taxAmount).toBe(72);
+    expect(disc.finalPrice).toBe(1512);
+    expect(disc.totalSaved).toBe(560);
+  });
+
+  it('Registry completeness: all 15 calculators are registered with valid metadata and schemas', () => {
     const all = registry.getAll();
-    expect(all.length).toBe(13);
+    expect(all.length).toBe(15);
     for (const calc of all) {
       expect(calc.id).toBeTruthy();
       expect(calc.name).toBeTruthy();

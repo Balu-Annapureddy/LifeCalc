@@ -58,6 +58,23 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [remainingQuota, setRemainingQuota] = useState<number | null>(null);
 
+  // Sync server quota on mount
+  React.useEffect(() => {
+    fetch('/api/calculate')
+      .then(res => res.json())
+      .then(data => {
+        if (data.isGuest !== undefined) {
+          if (data.calculationsRemaining !== undefined) {
+            setRemainingQuota(data.calculationsRemaining);
+          }
+          if (data.quotaReached) {
+            setQuotaExceeded(true);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Authoritative calculation execution
   const currentResult: CalculatorResult = useMemo(() => {
     try {
@@ -162,6 +179,11 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
       }
       if (data.calculationsRemaining !== undefined) {
         setRemainingQuota(data.calculationsRemaining);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('lifecalc:quota-update', {
+            detail: { calculationsRemaining: data.calculationsRemaining, isGuest: data.isGuest }
+          }));
+        }
       }
 
       // Record to history
@@ -258,13 +280,16 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
             ))}
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 space-y-1.5">
             <button
               onClick={handleServerExecution}
               className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-sm transition-all focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center justify-center gap-2"
             >
               <span>Calculate & Verify</span>
             </button>
+            <p className="text-[11px] text-center text-slate-400">
+              Live preview updates instantly. Click to verify & save to official history.
+            </p>
           </div>
         </div>
 
@@ -273,9 +298,15 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
           {/* Primary Result Banner */}
           <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-6 sm:p-8 shadow-md relative overflow-hidden">
             <div className="relative z-10 space-y-3">
-              <span className="text-xs uppercase tracking-wider font-semibold text-slate-400">
-                {currentResult.primary.label}
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs uppercase tracking-wider font-semibold text-slate-400">
+                  {currentResult.primary.label}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Preview
+                </span>
+              </div>
               <div className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white font-mono">
                 {currentResult.primary.formattedValue}
               </div>

@@ -1,4 +1,4 @@
-﻿import crypto from 'crypto';
+import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { config } from './config';
 import {
@@ -20,6 +20,7 @@ export interface SafeUser {
   id: string;
   email: string;
   name: string;
+  emailVerified: boolean;
   createdAt: number;
 }
 
@@ -133,6 +134,7 @@ export async function verifySessionToken(token: string): Promise<SafeUser | null
     id: user.id,
     email: user.email,
     name: user.name,
+    emailVerified: Boolean(user.emailVerified),
     createdAt: user.createdAt,
   };
 }

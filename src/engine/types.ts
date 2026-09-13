@@ -4,9 +4,7 @@ export type CalculatorCategory =
   | 'money'
   | 'student'
   | 'buying'
-  | 'time'
-  | 'technology'
-  | 'everyday';
+  | 'time';
 
 export interface CategoryMeta {
   id: CalculatorCategory;

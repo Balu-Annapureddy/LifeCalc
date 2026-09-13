@@ -81,6 +81,7 @@ describe('Tamper-Proof Guest Quota Suite', () => {
       id: 'test_user_quota_123',
       email: 'quota_tester@lifecalc.in',
       name: 'Quota Tester',
+      emailVerified: true,
       createdAt: Date.now(),
     });
 
@@ -130,5 +131,60 @@ describe('Tamper-Proof Guest Quota Suite', () => {
     expect(setCookie).toBeTruthy();
     expect(setCookie).not.toBe(tamperedCookie);
     expect(setCookie!.startsWith('guest_')).toBe(true);
+  });
+
+  it('GET /api/calculate queries current authoritative quota without incrementing usage count', async () => {
+    const testSid = `get_check_guest_${Date.now()}`;
+    const cookieHeader = `lifecalc_guest_sid=${testSid}`;
+
+    // Initial check: 15 remaining
+    const req1 = new NextRequest('http://localhost:3000/api/calculate', {
+      method: 'GET',
+      headers: { Cookie: cookieHeader },
+    });
+    const res1 = await GET(req1);
+    expect(res1.status).toBe(200);
+    const data1 = await res1.json();
+    expect(data1.isGuest).toBe(true);
+    expect(data1.calculationsUsed).toBe(0);
+    expect(data1.calculationsRemaining).toBe(15);
+    expect(data1.quotaReached).toBe(false);
+
+    // Consume 1 calculation
+    const calcReq = new NextRequest('http://localhost:3000/api/calculate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookieHeader,
+      },
+      body: JSON.stringify({
+        calculatorId: 'emi',
+        inputs: { principal: 100000, annualRate: 10, tenureYears: 1 },
+      }),
+    });
+    const calcRes = await POST(calcReq);
+    expect(calcRes.status).toBe(200);
+    const calcData = await calcRes.json();
+    expect(calcData.calculationsRemaining).toBe(14);
+
+    // GET check must return 14 remaining and NOT increment to 13
+    const req2 = new NextRequest('http://localhost:3000/api/calculate', {
+      method: 'GET',
+      headers: { Cookie: cookieHeader },
+    });
+    const res2 = await GET(req2);
+    expect(res2.status).toBe(200);
+    const data2 = await res2.json();
+    expect(data2.calculationsUsed).toBe(1);
+    expect(data2.calculationsRemaining).toBe(14);
+
+    // Second GET check still returns 14 remaining
+    const req3 = new NextRequest('http://localhost:3000/api/calculate', {
+      method: 'GET',
+      headers: { Cookie: cookieHeader },
+    });
+    const res3 = await GET(req3);
+    const data3 = await res3.json();
+    expect(data3.calculationsRemaining).toBe(14);
   });
 });

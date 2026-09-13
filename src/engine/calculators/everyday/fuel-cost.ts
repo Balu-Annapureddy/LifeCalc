@@ -39,15 +39,15 @@ export const fuelCalculator: CalculatorDefinition<FuelInput> = {
   slug: 'fuel-cost',
   name: 'Fuel Cost & Mileage Calculator',
   shortTitle: 'Fuel & Mileage',
-  category: 'everyday',
-  subcategory: 'Travel',
+  category: 'money',
+  subcategory: 'Everyday Expenses',
   description: 'Calculate total fuel cost, litres of petrol or diesel required, cost per kilometre, and carpool split costs for any road trip.',
-  badge: 'Travel Utility',
+  badge: 'Everyday',
   seo: {
     title: 'Fuel Cost Calculator — Trip Petrol/Diesel Cost & Carpool Split',
     description: 'Calculate fuel cost for car or bike road trips based on distance, mileage (km/l), petrol/diesel prices, and split costs among travellers with LifeCalc.',
     keywords: ['fuel cost calculator', 'petrol cost calculator', 'trip mileage calculator', 'carpool cost split', 'car travel cost calculator'],
-    canonicalPath: '/calculators/everyday/fuel-cost',
+    canonicalPath: '/calculators/money/fuel-cost',
   },
   inputs: [
     {

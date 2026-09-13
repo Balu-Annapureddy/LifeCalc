@@ -11,7 +11,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRemaining = 15 }) => {
   const [remaining, setRemaining] = useState<number>(initialRemaining);
   const [isGuest, setIsGuest] = useState(true);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; email: string; emailVerified?: boolean } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -36,6 +36,25 @@ export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRe
         }
       })
       .catch(() => {});
+
+    const handleQuotaUpdate = (e: any) => {
+      if (e.detail?.calculationsRemaining !== undefined) {
+        setRemaining(e.detail.calculationsRemaining);
+        if (e.detail?.isGuest !== undefined) {
+          setIsGuest(e.detail.isGuest);
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('lifecalc:quota-update', handleQuotaUpdate);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('lifecalc:quota-update', handleQuotaUpdate);
+      }
+    };
   }, []);
 
   const handleSignOut = async () => {
@@ -71,16 +90,16 @@ export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRe
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-5 text-sm font-medium text-slate-600">
             <Link href="/calculators/money" className="hover:text-blue-600 transition-colors">
-              Money
+              Money & Expenses
             </Link>
             <Link href="/calculators/student" className="hover:text-blue-600 transition-colors">
               Student
             </Link>
             <Link href="/calculators/buying" className="hover:text-blue-600 transition-colors">
-              Decisions
+              Buying
             </Link>
-            <Link href="/calculators/everyday" className="hover:text-blue-600 transition-colors">
-              Everyday
+            <Link href="/calculators/time/age" className="hover:text-blue-600 transition-colors">
+              Age & Life
             </Link>
           </nav>
         </div>
@@ -90,6 +109,7 @@ export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRe
           {/* Guest Calculation Counter */}
           {isGuest && remaining !== Infinity && (
             <div
+              data-testid="guest-quota-badge"
               className={`hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
                 remaining <= 3
                   ? 'bg-amber-50 text-amber-800 border-amber-200'
@@ -99,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRe
             >
               <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
               <span>
-                Free calculations: <strong className="font-bold">{remaining}</strong> / 15
+                Free calculations: <strong className="font-bold">{remaining}/15</strong>
               </span>
             </div>
           )}
@@ -129,9 +149,19 @@ export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRe
                 >
                   History
                 </Link>
-                <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
-                  {currentUser.name || currentUser.email.split('@')[0]}
-                </span>
+                <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                  <span className="text-xs font-medium text-slate-700">
+                    {currentUser.name || currentUser.email.split('@')[0]}
+                  </span>
+                  {currentUser.emailVerified === false && (
+                    <span
+                      title="Email verification pending"
+                      className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-1.5 py-0.2 rounded border border-amber-200"
+                    >
+                      Unverified
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={handleSignOut}
@@ -176,7 +206,7 @@ export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRe
           {isGuest && (
             <div className="text-xs font-medium text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex justify-between">
               <span>Free guest calculations left:</span>
-              <strong className="text-blue-600">{remaining} / 15</strong>
+              <strong className="text-blue-600 font-bold">{remaining}/15</strong>
             </div>
           )}
           <nav className="flex flex-col space-y-2 text-sm font-medium text-slate-700">
@@ -185,7 +215,7 @@ export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRe
               onClick={() => setMobileMenuOpen(false)}
               className="px-2 py-1.5 rounded hover:bg-slate-100"
             >
-              Money & Loans
+              Money & Everyday Expenses
             </Link>
             <Link
               href="/calculators/student"
@@ -202,11 +232,11 @@ export const Header: React.FC<HeaderProps> = ({ remainingCalculations: initialRe
               Buying & Affordability
             </Link>
             <Link
-              href="/calculators/everyday"
+              href="/calculators/time/age"
               onClick={() => setMobileMenuOpen(false)}
               className="px-2 py-1.5 rounded hover:bg-slate-100"
             >
-              Everyday Tools
+              Age & Life
             </Link>
           </nav>
         </div>

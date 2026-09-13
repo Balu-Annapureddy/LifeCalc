@@ -19,6 +19,9 @@ describe('Calculator Registry Suite', () => {
     expect(ids).toContain('total-ownership-cost');
     expect(ids).toContain('age');
     expect(ids).toContain('fuel-cost');
+    expect(ids).toContain('bill-split');
+    expect(ids).toContain('discount');
+    expect(all.length).toBe(15);
   });
 
   it('fetches by slug and category correctly', () => {

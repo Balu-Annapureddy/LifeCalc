@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { findUserByEmail } from '@/lib/db';
 import {
   verifyPassword,
@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       id: user.id,
       email: user.email,
       name: user.name,
+      emailVerified: Boolean(user.emailVerified),
       createdAt: user.createdAt,
     };
 

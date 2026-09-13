@@ -90,7 +90,7 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link href="/calculators/everyday/fuel-cost" className="hover:text-blue-600">
+                <Link href="/calculators/money/fuel-cost" className="hover:text-blue-600">
                   Fuel Cost & Mileage
                 </Link>
               </li>

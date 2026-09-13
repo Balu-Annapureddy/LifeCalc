@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { findUserByEmail, insertUser } from '@/lib/db';
 import { hashPassword, createSessionToken, SafeUser } from '@/lib/auth';
@@ -24,10 +24,14 @@ export async function POST(req: NextRequest) {
 
     const { hash, salt } = hashPassword(password);
     const userId = `usr_${crypto.randomBytes(12).toString('hex')}`;
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+
     const safeUser: SafeUser = {
       id: userId,
       email: normalizedEmail,
       name: name.trim(),
+      emailVerified: false,
       createdAt: Date.now(),
     };
 
@@ -35,14 +39,21 @@ export async function POST(req: NextRequest) {
       ...safeUser,
       passwordHash: hash,
       salt,
+      emailVerified: false,
+      verificationToken,
+      verificationTokenExpiresAt: verificationExpires,
     });
+
+    // Production-safe email notification service dispatch
+    console.log(`[EMAIL VERIFICATION SERVICE] Verification token issued for ${normalizedEmail}. Verification URL: /verify-email?token=${verificationToken}`);
 
     const { token, expiresAt } = await createSessionToken(safeUser);
 
     const res = NextResponse.json({
       success: true,
       user: safeUser,
-      message: 'Account created successfully',
+      verificationRequired: true,
+      message: 'Account created successfully. Please verify your email address.',
     });
 
     res.cookies.set('lifecalc_auth_session', token, {

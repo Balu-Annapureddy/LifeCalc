@@ -9,6 +9,9 @@ export interface UserRecord {
   name: string;
   passwordHash: string;
   salt: string;
+  emailVerified?: boolean;
+  verificationToken?: string | null;
+  verificationTokenExpiresAt?: number | null;
   createdAt: number;
 }
 
@@ -218,6 +221,9 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
       name: data.name,
       passwordHash: data.password_hash,
       salt: data.salt,
+      emailVerified: Boolean(data.email_verified),
+      verificationToken: data.verification_token || null,
+      verificationTokenExpiresAt: data.verification_token_expires_at ? Number(data.verification_token_expires_at) : null,
       createdAt: Number(data.created_at),
     };
   }
@@ -240,6 +246,9 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
       name: data.name,
       passwordHash: data.password_hash,
       salt: data.salt,
+      emailVerified: Boolean(data.email_verified),
+      verificationToken: data.verification_token || null,
+      verificationTokenExpiresAt: data.verification_token_expires_at ? Number(data.verification_token_expires_at) : null,
       createdAt: Number(data.created_at),
     };
   }
@@ -250,8 +259,84 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
   });
 }
 
+export async function findUserByVerificationToken(token: string): Promise<UserRecord | null> {
+  if (!token) return null;
+  const supabase = getActiveSupabase();
+  if (supabase) {
+    const { data, error } = await supabase.from('users').select('*').eq('verification_token', token).maybeSingle();
+    if (error) throw new Error(`[DB ERROR] findUserByVerificationToken: ${error.message}`);
+    if (!data) return null;
+    return {
+      id: data.id,
+      email: data.email,
+      name: data.name,
+      passwordHash: data.password_hash,
+      salt: data.salt,
+      emailVerified: Boolean(data.email_verified),
+      verificationToken: data.verification_token || null,
+      verificationTokenExpiresAt: data.verification_token_expires_at ? Number(data.verification_token_expires_at) : null,
+      createdAt: Number(data.created_at),
+    };
+  }
+
+  return withLocalLock(db => {
+    const user = db.users.find(u => u.verificationToken === token) || null;
+    return { result: user, modified: false };
+  });
+}
+
+export async function verifyUserEmail(userId: string): Promise<boolean> {
+  const supabase = getActiveSupabase();
+  if (supabase) {
+    const { error } = await supabase.from('users').update({
+      email_verified: true,
+      verification_token: null,
+      verification_token_expires_at: null,
+    }).eq('id', userId);
+    if (error) throw new Error(`[DB ERROR] verifyUserEmail: ${error.message}`);
+    return true;
+  }
+
+  return withLocalLock(db => {
+    const user = db.users.find(u => u.id === userId);
+    if (user) {
+      user.emailVerified = true;
+      user.verificationToken = null;
+      user.verificationTokenExpiresAt = null;
+      return { result: true, modified: true };
+    }
+    return { result: false, modified: false };
+  });
+}
+
+export async function updateUserVerificationToken(userId: string, token: string, expiresAt: number): Promise<boolean> {
+  const supabase = getActiveSupabase();
+  if (supabase) {
+    const { error } = await supabase.from('users').update({
+      verification_token: token,
+      verification_token_expires_at: expiresAt,
+    }).eq('id', userId);
+    if (error) throw new Error(`[DB ERROR] updateUserVerificationToken: ${error.message}`);
+    return true;
+  }
+
+  return withLocalLock(db => {
+    const user = db.users.find(u => u.id === userId);
+    if (user) {
+      user.verificationToken = token;
+      user.verificationTokenExpiresAt = expiresAt;
+      return { result: true, modified: true };
+    }
+    return { result: false, modified: false };
+  });
+}
+
 export async function insertUser(user: UserRecord): Promise<UserRecord> {
   const normalized = user.email.toLowerCase().trim();
+  const emailVerified = user.emailVerified ?? false;
+  const verificationToken = user.verificationToken || null;
+  const verificationExpires = user.verificationTokenExpiresAt || null;
+
   const supabase = getActiveSupabase();
   if (supabase) {
     const { error } = await supabase.from('users').upsert({
@@ -260,20 +345,24 @@ export async function insertUser(user: UserRecord): Promise<UserRecord> {
       name: user.name,
       password_hash: user.passwordHash,
       salt: user.salt,
+      email_verified: emailVerified,
+      verification_token: verificationToken,
+      verification_token_expires_at: verificationExpires,
       created_at: user.createdAt,
     });
     if (error) throw new Error(`[DB ERROR] insertUser: ${error.message}`);
-    return user;
+    return { ...user, email: normalized, emailVerified, verificationToken, verificationTokenExpiresAt: verificationExpires };
   }
 
   return withLocalLock(db => {
     const idx = db.users.findIndex(u => u.email === normalized);
+    const updatedUser = { ...user, email: normalized, emailVerified, verificationToken, verificationTokenExpiresAt: verificationExpires };
     if (idx >= 0) {
-      db.users[idx] = { ...user, email: normalized };
+      db.users[idx] = updatedUser;
     } else {
-      db.users.push({ ...user, email: normalized });
+      db.users.push(updatedUser);
     }
-    return { result: user, modified: true };
+    return { result: updatedUser, modified: true };
   });
 }
 

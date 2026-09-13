@@ -1,4 +1,4 @@
-﻿-- LifeCalc Authoritative Production PostgreSQL / Supabase Migration Schema
+-- LifeCalc Authoritative Production PostgreSQL / Supabase Migration Schema
 -- Designed for horizontal scaling, atomic quota invariants, and Row Level Security.
 
 -- 1. Users Table
@@ -8,9 +8,16 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   salt TEXT NOT NULL,
+  email_verified BOOLEAN NOT NULL DEFAULT false,
+  verification_token TEXT,
+  verification_token_expires_at BIGINT,
   created_at BIGINT NOT NULL
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires_at BIGINT;
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_verification_token ON users(verification_token);
 
 -- 2. Sessions Table
 CREATE TABLE IF NOT EXISTS sessions (

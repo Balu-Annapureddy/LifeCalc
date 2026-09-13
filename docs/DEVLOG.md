@@ -267,3 +267,45 @@
    - `vitest run`: 55/55 passed across 7 test files.
    - `next build`: 42 routes compiled cleanly.
    - `playwright test`: 4/4 E2E browser tests passed.
+
+## [Entry 010] — 2026-09-13: UX Simplification, Guest Quota Synchronization & Unified Auth Sprint
+
+### What Was Audited & Implemented
+1. **Guest Quota UI & Real-Time Synchronization**:
+   - Identified and resolved the state disconnect between `CalculatorRunner` and `Header`: the top quota indicator had been reading only client-side localStorage which was out of sync with the server-authoritative guest session.
+   - Added `GET /api/calculate` endpoint returning authoritative `{ calculationsRemaining, calculationsUsed, quotaReached }`.
+   - Updated `Header.tsx` to display `{remaining}/15` (e.g. `15/15`, `14/15`, down to `0/15`), fetch server state on mount, and subscribe to a custom window event (`lifecalc:quota-update`).
+   - Enhanced `CalculatorRunner.tsx` to dispatch `lifecalc:quota-update` whenever a server calculation is verified, ensuring immediate UI synchronization across the header and runner without needing a manual refresh.
+2. **Clear Calculator Interaction Model**:
+   - Formalized the dual-layer calculation UX: instant, deterministic local calculation on every input change (flagged with a clean green `Live Preview` indicator) paired with server-authoritative persistence/quota tracking via the explicit `Calculate & Verify` button.
+   - Added transparent microcopy explaining that instant mathematical previews are unlimited, while saving to personal history, cloud sharing, and server verification utilize the 15 free guest calculations.
+3. **Simplified Category Structure & Redirections**:
+   - Removed the empty placeholder category `technology` across type definitions (`CalculatorCategory`) and registries.
+   - Consolidated the application into 4 top-level core categories:
+     - **Money & Everyday Expenses** (`/calculators/money`): Loans, investments, salaries, taxes, and daily expense math.
+     - **Student & Academics** (`/calculators/student`): Attendance rules and grade/CGPA conversions.
+     - **Buying & Affordability** (`/calculators/buying`): High-ticket purchase decisions and affordability guardrails.
+     - **Age & Life** (`/calculators/time`): Chronological age, milestones, and life event calculations.
+   - Configured permanent Next.js redirects (`next.config.js`) routing legacy paths `/calculators/everyday/:slug*` to `/calculators/money/:slug*` and `/calculators/technology` to `/`.
+4. **Everyday Expenses Expansion**:
+   - Built two new authoritative mathematical calculators:
+     - `bill-split.ts`: Bill Split & Tip Calculator with custom tip percentages, tax, unequal item shares, and SVG donut distribution.
+     - `discount.ts`: Discount & Savings Calculator with dual stacking discounts, coupons, sales tax calculation, and total savings breakdown.
+   - Seamlessly integrated both into the registry, bringing total registered production calculators to 15.
+5. **Email Verification Architecture**:
+   - Extended `UserRecord` with `emailVerified`, `verificationToken`, and `verificationTokenExpiresAt`.
+   - Added database queries (`findUserByVerificationToken`, `verifyUserEmail`, `updateUserVerificationToken`) and updated `data/schema.sql` with migration-safe idempotent `ALTER TABLE` statements and indexing.
+   - Created endpoints:
+     - `POST` & `GET /api/auth/verify`: Consumes 64-character verification tokens.
+     - `POST /api/auth/verify/resend`: Authenticated rate-limited token reissuance.
+   - Added branded user verification page (`/verify-email`) with client-side feedback and auto-redirect.
+6. **Google OAuth 2.0 Integration & Zero Session Fragmentation**:
+   - Implemented production-grade Google OAuth 2.0 PKCE flow in `/api/auth/oauth/google` and `/api/auth/oauth/google/callback`.
+   - Reuses the identical LifeCalc HMAC-SHA256 session token format (`createSessionToken`) and `lifecalc_auth_session` cookie; prevents any session fragmentation between credential and OAuth users.
+   - Designed with clear fail-safe configuration handling: gracefully returns a structured 503 error if `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET` are unconfigured in deployment.
+
+### Verification Status
+- `npm run typecheck`: 0 TypeScript errors.
+- `npm test` (Vitest): 70/70 passed across 8 test suites (including `auth-verification.test.ts` and `calculator-regression.test.ts`).
+- `npm run build`: 47 static & dynamic routes compiled successfully without hydration or suspense warnings.
+- `npm run test:e2e`: 4/4 Playwright browser tests passed in Chromium.

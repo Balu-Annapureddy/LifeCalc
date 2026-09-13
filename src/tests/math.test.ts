@@ -12,6 +12,8 @@ import { calculateAgePure } from '../engine/calculators/time/age';
 import { calculateFuelCostPure } from '../engine/calculators/everyday/fuel-cost';
 import { calculateEmiVsCashPure } from '../engine/calculators/buying/emi-vs-cash';
 import { calculateOwnershipCostPure } from '../engine/calculators/buying/total-ownership-cost';
+import { calculateBillSplitPure } from '../engine/calculators/money/bill-split';
+import { calculateDiscountPure } from '../engine/calculators/money/discount';
 
 describe('Authoritative Mathematical Engine Tests', () => {
   describe('EMI Calculator Pure Math', () => {
@@ -259,6 +261,53 @@ describe('Authoritative Mathematical Engine Tests', () => {
       expect(res.netTotalOwnershipCost).toBeGreaterThan(1000000);
       expect(res.effectiveCostPerMonth).toBeGreaterThan(20000);
       expect(res.effectiveCostPerKm).toBeGreaterThan(15);
+    });
+  });
+
+  describe('Bill Split & Tip Math', () => {
+    it('splits bill evenly with tip and additional charges', () => {
+      // ₹2,400 bill, 4 people, 10% tip (₹240), ₹0 charges => Total ₹2,640 => ₹660/person
+      const res = calculateBillSplitPure(2400, 4, 10, 0);
+      expect(res.tipAmount).toBe(240);
+      expect(res.grandTotal).toBe(2640);
+      expect(res.perPerson).toBe(660);
+      expect(res.perPersonBase).toBe(600);
+      expect(res.perPersonTip).toBe(60);
+    });
+
+    it('handles 0% tip and delivery charges correctly', () => {
+      // ₹1,000 bill, 2 people, 0% tip, ₹50 delivery charge => ₹1,050 => ₹525/person
+      const res = calculateBillSplitPure(1000, 2, 0, 50);
+      expect(res.tipAmount).toBe(0);
+      expect(res.grandTotal).toBe(1050);
+      expect(res.perPerson).toBe(525);
+    });
+  });
+
+  describe('Discount & Savings Math', () => {
+    it('calculates single percentage discount accurately', () => {
+      // ₹1,000 item with 25% discount => ₹750 price, ₹250 saved
+      const res = calculateDiscountPure(1000, 25, 0, 0);
+      expect(res.finalPrice).toBe(750);
+      expect(res.totalSaved).toBe(250);
+      expect(res.effectiveDiscountPercentage).toBe(25);
+    });
+
+    it('calculates stacked sequential discounts correctly', () => {
+      // ₹3,500 item, 30% sale discount, 10% extra coupon => ₹2,450 - ₹245 = ₹2,205
+      const res = calculateDiscountPure(3500, 30, 10, 0);
+      expect(res.finalPrice).toBe(2205);
+      expect(res.totalSaved).toBe(1295);
+      expect(res.effectiveDiscountPercentage).toBe(37);
+    });
+
+    it('factors in post-discount tax accurately', () => {
+      // ₹2,000 item with 50% discount (₹1,000) + 18% GST (₹180) => ₹1,180
+      const res = calculateDiscountPure(2000, 50, 0, 18);
+      expect(res.discountedPrice).toBe(1000);
+      expect(res.taxAmount).toBe(180);
+      expect(res.finalPrice).toBe(1180);
+      expect(res.totalSaved).toBe(1000);
     });
   });
 });

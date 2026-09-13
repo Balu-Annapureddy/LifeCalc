@@ -45,9 +45,9 @@ export const gstCalculator: CalculatorDefinition<GstInput> = {
   name: 'GST Calculator',
   shortTitle: 'GST',
   category: 'money',
-  subcategory: 'Tax',
+  subcategory: 'Everyday Expenses',
   description: 'Add or remove Goods and Services Tax (GST), calculate CGST, SGST, and IGST components across Indian GST slabs (5%, 12%, 18%, 28%).',
-  badge: 'Tax Tool',
+  badge: 'Everyday',
   seo: {
     title: 'GST Calculator India — Add or Remove GST, CGST, SGST Breakdown',
     description: 'Calculate GST inclusive and exclusive prices, CGST, SGST and net amount for 5%, 12%, 18% and 28% GST tax rates with LifeCalc.',

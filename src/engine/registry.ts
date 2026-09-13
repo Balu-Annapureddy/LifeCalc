@@ -12,6 +12,8 @@ import { emiVsCashCalculator } from './calculators/buying/emi-vs-cash';
 import { totalOwnershipCostCalculator } from './calculators/buying/total-ownership-cost';
 import { ageCalculator } from './calculators/time/age';
 import { fuelCalculator } from './calculators/everyday/fuel-cost';
+import { billSplitCalculator } from './calculators/money/bill-split';
+import { discountCalculator } from './calculators/money/discount';
 
 export class CalculatorRegistry {
   private calculators: Map<string, CalculatorDefinition<any>> = new Map();
@@ -24,6 +26,8 @@ export class CalculatorRegistry {
     this.register(compoundInterestCalculator);
     this.register(cagrCalculator);
     this.register(gstCalculator);
+    this.register(billSplitCalculator);
+    this.register(discountCalculator);
     this.register(cgpaCalculator);
     this.register(attendanceCalculator);
     this.register(canIAffordThisCalculator);
