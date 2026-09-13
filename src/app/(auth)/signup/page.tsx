@@ -1,0 +1,111 @@
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Calculator, ShieldCheck, Check } from 'lucide-react';
+
+export default function SignUpPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    router.push('/');
+  };
+
+  return (
+    <div className="max-w-md mx-auto py-12 px-4 space-y-6">
+      <div className="text-center space-y-2">
+        <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center mx-auto shadow-md">
+          <Calculator className="w-6 h-6" />
+        </div>
+        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+          Create Your Free LifeCalc Account
+        </h1>
+        <p className="text-xs text-slate-500">
+          Unlimited calculations, saved history, and synchronisation across your devices.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm space-y-5">
+        <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3.5 space-y-1.5 text-xs text-blue-900">
+          <div className="font-semibold flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-blue-600" />
+            100% Free Forever Promise
+          </div>
+          <ul className="space-y-1 text-blue-800 text-[11px]">
+            <li className="flex items-center gap-1.5">
+              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+              Unlimited basic calculation executions
+            </li>
+            <li className="flex items-center gap-1.5">
+              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+              Save custom calculations & scenarios
+            </li>
+            <li className="flex items-center gap-1.5">
+              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+              No credit card required
+            </li>
+          </ul>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">Your Name</label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Your full name"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">Email Address</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">Password</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors"
+          >
+            Create Free Account
+          </button>
+        </form>
+
+        <div className="relative border-t border-slate-100 pt-4 text-center">
+          <div className="text-xs text-slate-500">
+            Already have an account?{' '}
+            <Link href="/signin" className="text-blue-600 font-semibold hover:underline">
+              Sign in
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

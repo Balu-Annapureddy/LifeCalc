@@ -27,7 +27,7 @@ export type InputFieldType =
 
 export interface SelectOption {
   label: string;
-  value: string | number;
+  value: string | number | boolean;
 }
 
 export interface InputDefinition {
@@ -58,6 +58,7 @@ export interface ResultItem {
 
 export interface ChartDataPoint {
   label: string;
+  value: number;
   [key: string]: string | number;
 }
 
@@ -120,7 +121,7 @@ export interface SeoMetadata {
   canonicalPath: string;
 }
 
-export interface CalculatorDefinition<TInput = Record<string, any>> {
+export interface CalculatorDefinition<TInput = any> {
   id: string;
   slug: string;
   name: string;
@@ -131,7 +132,7 @@ export interface CalculatorDefinition<TInput = Record<string, any>> {
   badge?: string;
   seo: SeoMetadata;
   inputs: InputDefinition[];
-  inputSchema: z.ZodType<TInput>;
+  inputSchema: z.ZodType<TInput, any, any>;
   calculate: (inputs: TInput) => CalculatorResult;
   examples: CalculatorExample[];
   faq: FAQItem[];

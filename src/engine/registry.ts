@@ -12,7 +12,7 @@ import { ageCalculator } from './calculators/time/age';
 import { fuelCalculator } from './calculators/everyday/fuel-cost';
 
 export class CalculatorRegistry {
-  private calculators: Map<string, CalculatorDefinition> = new Map();
+  private calculators: Map<string, CalculatorDefinition<any>> = new Map();
   private slugMap: Map<string, string> = new Map();
 
   constructor() {
@@ -29,42 +29,42 @@ export class CalculatorRegistry {
     this.register(fuelCalculator);
   }
 
-  public register(calc: CalculatorDefinition): void {
+  public register(calc: CalculatorDefinition<any>): void {
     this.calculators.set(calc.id, calc);
     this.slugMap.set(calc.slug, calc.id);
   }
 
-  public getById(id: string): CalculatorDefinition | undefined {
+  public getById(id: string): CalculatorDefinition<any> | undefined {
     return this.calculators.get(id);
   }
 
-  public getBySlug(slug: string): CalculatorDefinition | undefined {
+  public getBySlug(slug: string): CalculatorDefinition<any> | undefined {
     const id = this.slugMap.get(slug);
     if (!id) return undefined;
     return this.calculators.get(id);
   }
 
-  public getAll(): CalculatorDefinition[] {
+  public getAll(): CalculatorDefinition<any>[] {
     return Array.from(this.calculators.values());
   }
 
-  public getByCategory(category: CalculatorCategory): CalculatorDefinition[] {
+  public getByCategory(category: CalculatorCategory): CalculatorDefinition<any>[] {
     return this.getAll().filter(calc => calc.category === category);
   }
 
-  public getRelated(calcId: string): CalculatorDefinition[] {
+  public getRelated(calcId: string): CalculatorDefinition<any>[] {
     const calc = this.getById(calcId);
     if (!calc || !calc.relatedCalculatorIds) return [];
 
     return calc.relatedCalculatorIds
       .map(id => this.getById(id))
-      .filter((c): c is CalculatorDefinition => c !== undefined);
+      .filter((c): c is CalculatorDefinition<any> => c !== undefined);
   }
 
   /**
    * Fast, typo-tolerant search across name, shortTitle, description, category, and SEO keywords.
    */
-  public search(query: string): CalculatorDefinition[] {
+  public search(query: string): CalculatorDefinition<any>[] {
     const cleanQuery = query.trim().toLowerCase();
     if (!cleanQuery) return this.getAll();
 
