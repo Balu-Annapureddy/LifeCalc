@@ -55,8 +55,9 @@ const isProduction = process.env.NODE_ENV === 'production';
 const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' || process.env.npm_lifecycle_event === 'build';
 const databaseMode = resolveDatabaseMode();
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.SUPABASE_URL?.trim();
+// STRICT SECURITY: Never allow SUPABASE_ANON_KEY to substitute for SUPABASE_SERVICE_ROLE_KEY
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
 // Production validation: If DATABASE_MODE is supabase in production runtime, verify credentials exist
 if (isProduction && databaseMode === 'supabase' && !isBuildPhase) {

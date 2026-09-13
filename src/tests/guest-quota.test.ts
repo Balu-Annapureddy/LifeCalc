@@ -102,4 +102,33 @@ describe('Tamper-Proof Guest Quota Suite', () => {
     expect(data.quotaReached).toBe(false);
     expect(data.calculationsRemaining).toBe(-1);
   });
+
+  it('detects and rejects tampered guest quota cookies', async () => {
+    const { signGuestId } = await import('@/lib/guest');
+    const validGuestId = 'guest_genuine_1234567890abcdef';
+    const validSignedCookie = signGuestId(validGuestId);
+
+    // Tamper with the ID part while leaving signature unchanged
+    const tamperedCookie = `guest_forged_9999999999abcdef.${validSignedCookie.split('.')[1]}`;
+
+    const req = new NextRequest('http://localhost:3000/api/calculate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: `lifecalc_guest_sid=${tamperedCookie}`,
+      },
+      body: JSON.stringify({
+        calculatorId: 'emi',
+        inputs: { principal: 1000000, annualRate: 9, tenureYears: 5 },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    // Tampered cookie must be discarded; a fresh guest session must be issued in set-cookie
+    const setCookie = res.cookies.get('lifecalc_guest_sid')?.value;
+    expect(setCookie).toBeTruthy();
+    expect(setCookie).not.toBe(tamperedCookie);
+    expect(setCookie!.startsWith('guest_')).toBe(true);
+  });
 });

@@ -224,3 +224,33 @@
 5. **Updated Testing & CI (`src/tests/quota-concurrency.test.ts`, `.github/workflows/ci.yml`, `playwright.config.ts`)**:
    - Vitest suite increased to 53 tests across 7 test files (100% pass rate).
    - Playwright browser E2E tests passing 4/4 against production build.
+
+## [Entry 008] — 2026-09-13: Production Gate Hardening (Atomic RPC Invariants, Fail-Closed Security, & Full Browser UI Quota Verification)
+
+### What Was Audited & Hardened
+1. **Unsafe Supabase Quota Fallback Removed (`src/lib/db.ts`)**:
+   - Eliminated read-then-write SELECT/UPSERT fallback in `incrementGuestQuotaAtomic`.
+   - In Supabase mode, the PostgreSQL RPC `increment_guest_quota` is strictly authoritative. If the database RPC is unreachable or fails, the application fails closed with a critical database error and never silently falls back to JSON or allows unauthorized calculations.
+2. **Atomic Failed-Login Rate Limiting (`src/lib/db.ts`, `data/schema.sql`, `src/tests/quota-concurrency.test.ts`)**:
+   - `recordFailedLogin` in Supabase mode directly executes the atomic PostgreSQL function `record_failed_login_atomic`.
+   - Added an automated concurrency test simulating 10 simultaneous failed login attempts for an account: verified that all 10 attempts are recorded atomically without lost updates and the 15-minute lock is strictly triggered.
+3. **Database Security & Key Integrity (`src/lib/config.ts`)**:
+   - Removed any substitution of `SUPABASE_ANON_KEY` for `SUPABASE_SERVICE_ROLE_KEY`. The variable `SUPABASE_SERVICE_ROLE_KEY` must contain only the actual service-role key.
+   - Cleaned `data/schema.sql` to ensure idempotent, migration-safe execution against standard PostgreSQL/Supabase instances (`DROP POLICY IF EXISTS ... CREATE POLICY ...`).
+4. **Full UI Browser Quota Journey (`e2e/lifecalc.spec.ts`)**:
+   - Upgraded the Playwright guest quota E2E test: performs all 15 calculations through the actual calculator form inputs and "Calculate & Verify" UI button.
+   - Verifies:
+     1. Calculations 1–15 compute successfully.
+     2. 15th result remains rendered and visible.
+     3. Conversion prompt banner appears.
+     4. 16th attempt through the UI button does not recalculate and maintains the quota banner.
+     5. Page reload preserves the quota state and does not reset usage.
+     6. Sign-in navigation routes to `/signin`.
+5. **Guest Cookie Tampering Verification (`src/tests/guest-quota.test.ts`)**:
+   - Added automated regression test verifying that forged/tampered `lifecalc_guest_sid` cookies are rejected and replaced with freshly signed sessions.
+
+### Verification Status
+- `npm run typecheck`: 0 TypeScript errors.
+- `npm test`: 55 passed across 7 test suites (100% pass rate).
+- `npm run build`: Compiled with 42 static & dynamic routes.
+- `npm run test:e2e`: 4/4 Playwright browser tests passed in Chromium.

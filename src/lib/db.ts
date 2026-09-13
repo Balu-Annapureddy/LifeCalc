@@ -356,27 +356,18 @@ export async function getGuestQuota(guestId: string): Promise<number> {
 export async function incrementGuestQuotaAtomic(guestId: string, maxAllowed = 15): Promise<{ allowed: boolean; count: number }> {
   const supabase = getActiveSupabase();
   if (supabase) {
-    // Invoke stored Postgres atomic function
+    // Invoke stored Postgres atomic function: fail-closed if RPC fails
     const { data, error } = await supabase.rpc('increment_guest_quota', {
       p_guest_id: guestId,
       p_max_allowed: maxAllowed,
     });
-    if (!error && data && data.length > 0) {
-      return { allowed: data[0].allowed, count: data[0].new_count };
+    if (error) {
+      throw new Error(`[CRITICAL DATABASE ERROR] increment_guest_quota RPC failed: ${error.message}. Failing closed.`);
     }
-    // Fallback: atomic upsert if function not yet migrated
-    const current = await getGuestQuota(guestId);
-    if (current >= maxAllowed) {
-      return { allowed: false, count: current };
+    if (!data || data.length === 0) {
+      throw new Error('[CRITICAL DATABASE ERROR] increment_guest_quota returned empty result. Failing closed.');
     }
-    const { data: upsertData, error: upsertErr } = await supabase.from('guest_quotas').upsert({
-      guest_id: guestId,
-      count: current + 1,
-      last_used: Date.now(),
-      created_at: Date.now(),
-    }).select('count').single();
-    if (upsertErr) throw new Error(`[DB ERROR] incrementGuestQuota: ${upsertErr.message}`);
-    return { allowed: true, count: upsertData.count };
+    return { allowed: Boolean(data[0].allowed), count: Number(data[0].new_count) };
   }
 
   // Local atomic lock implementation
@@ -408,7 +399,10 @@ export async function checkLoginRateLimit(key: string): Promise<{ allowed: boole
   const now = Date.now();
   const supabase = getActiveSupabase();
   if (supabase) {
-    const { data } = await supabase.from('auth_rate_limits').select('*').eq('key', key).maybeSingle();
+    const { data, error } = await supabase.from('auth_rate_limits').select('*').eq('key', key).maybeSingle();
+    if (error) {
+      throw new Error(`[CRITICAL DATABASE ERROR] checkLoginRateLimit query failed: ${error.message}. Failing closed.`);
+    }
     if (data && Number(data.lock_until) > now) {
       const waitSeconds = Math.ceil((Number(data.lock_until) - now) / 1000);
       return { allowed: false, waitSeconds };
@@ -430,17 +424,15 @@ export async function recordFailedLogin(key: string): Promise<void> {
   const now = Date.now();
   const supabase = getActiveSupabase();
   if (supabase) {
-    const { data: record } = await supabase.from('auth_rate_limits').select('*').eq('key', key).maybeSingle();
-    const attempts = (record?.attempts || 0) + 1;
-    let lockUntil = record?.lock_until || 0;
-    if (attempts >= 5) {
-      lockUntil = now + 15 * 60 * 1000;
-    }
-    await supabase.from('auth_rate_limits').upsert({
-      key,
-      attempts,
-      lock_until: lockUntil,
+    // Authoritative atomic Postgres function: prevents concurrent race conditions
+    const { error } = await supabase.rpc('record_failed_login_atomic', {
+      p_key: key,
+      p_max_attempts: 5,
+      p_lock_ms: 15 * 60 * 1000,
     });
+    if (error) {
+      throw new Error(`[CRITICAL DATABASE ERROR] record_failed_login_atomic failed: ${error.message}. Failing closed.`);
+    }
     return;
   }
 
@@ -469,6 +461,24 @@ export async function resetLoginAttempts(key: string): Promise<void> {
     const prevLen = db.rateLimits.length;
     db.rateLimits = db.rateLimits.filter(r => r.key !== key);
     return { result: undefined, modified: db.rateLimits.length !== prevLen };
+  });
+}
+
+export async function getRateLimitRecord(key: string): Promise<RateLimitRecord | null> {
+  const supabase = getActiveSupabase();
+  if (supabase) {
+    const { data } = await supabase.from('auth_rate_limits').select('*').eq('key', key).maybeSingle();
+    if (!data) return null;
+    return {
+      key: data.key,
+      attempts: data.attempts,
+      lockUntil: Number(data.lock_until),
+    };
+  }
+
+  return withLocalLock<RateLimitRecord | null>(db => {
+    const record = db.rateLimits.find(r => r.key === key) || null;
+    return { result: record, modified: false };
   });
 }
 
