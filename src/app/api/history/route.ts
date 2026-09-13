@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/auth';
 import { getOrCreateGuestId } from '@/lib/guest';
 import {
@@ -8,8 +8,8 @@ import {
   clearHistoryByUserId,
 } from '@/lib/db';
 
-function getEffectiveUserId(req: NextRequest): string {
-  const user = getUserFromRequest(req);
+async function getEffectiveUserId(req: NextRequest): Promise<string> {
+  const user = await getUserFromRequest(req);
   if (user) return user.id;
   const { guestId } = getOrCreateGuestId(req);
   return guestId;
@@ -17,8 +17,8 @@ function getEffectiveUserId(req: NextRequest): string {
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = getEffectiveUserId(req);
-    const items = getHistoryByUserId(userId);
+    const userId = await getEffectiveUserId(req);
+    const items = await getHistoryByUserId(userId);
     return NextResponse.json({ items });
   } catch (err: any) {
     return NextResponse.json({ error: 'Failed to retrieve history' }, { status: 500 });
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = getEffectiveUserId(req);
+    const userId = await getEffectiveUserId(req);
     const body = await req.json();
     const { calculatorId, summary, primaryValue, inputs } = body;
 
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const newItem = insertHistory({
+    const newItem = await insertHistory({
       userId,
       calculatorId,
       summary: summary || 'Calculation execution',
@@ -52,16 +52,16 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const userId = getEffectiveUserId(req);
+    const userId = await getEffectiveUserId(req);
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 
     if (id) {
       // Strict IDOR protection: only deletes if the record belongs to this userId
-      const deleted = deleteHistoryById(id, userId);
+      const deleted = await deleteHistoryById(id, userId);
       return NextResponse.json({ success: true, deleted });
     } else {
-      clearHistoryByUserId(userId);
+      await clearHistoryByUserId(userId);
       return NextResponse.json({ success: true });
     }
   } catch (err: any) {

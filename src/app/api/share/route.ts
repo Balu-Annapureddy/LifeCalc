@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { saveSharedCalculation, getSharedCalculation } from '@/lib/share';
 
 export async function POST(req: NextRequest) {
@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing calculatorId or inputs' }, { status: 400 });
     }
 
-    const shareId = saveSharedCalculation(calculatorId, inputs);
+    const shareId = await saveSharedCalculation(calculatorId, inputs);
 
     return NextResponse.json({
       shareId,
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing id query parameter' }, { status: 400 });
   }
 
-  const data = getSharedCalculation(id);
+  const data = await getSharedCalculation(id);
   if (!data) {
     return NextResponse.json({ error: 'Share link not found or expired' }, { status: 404 });
   }

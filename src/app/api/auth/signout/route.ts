@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { invalidateSession } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get('lifecalc_auth_session')?.value;
   if (token) {
-    invalidateSession(token);
+    await invalidateSession(token);
   }
 
   const res = NextResponse.json({ success: true, message: 'Signed out successfully' });

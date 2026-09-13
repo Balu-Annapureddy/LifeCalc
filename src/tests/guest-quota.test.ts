@@ -69,7 +69,7 @@ describe('Tamper-Proof Guest Quota Suite', () => {
   it('allows unlimited calculations for authenticated users', async () => {
     const { insertUser } = await import('@/lib/db');
     const { createSessionToken } = await import('@/lib/auth');
-    insertUser({
+    await insertUser({
       id: 'test_user_quota_123',
       email: 'quota_tester@lifecalc.in',
       name: 'Quota Tester',
@@ -77,7 +77,7 @@ describe('Tamper-Proof Guest Quota Suite', () => {
       salt: 'dummy',
       createdAt: Date.now(),
     });
-    const { token } = createSessionToken({
+    const { token } = await createSessionToken({
       id: 'test_user_quota_123',
       email: 'quota_tester@lifecalc.in',
       name: 'Quota Tester',

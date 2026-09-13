@@ -8,9 +8,9 @@ import {
   insertSession,
   findSession,
   deleteSessionByHash,
-  getRateLimitRecord,
-  updateRateLimitRecord,
-  clearRateLimitRecord,
+  checkLoginRateLimit as dbCheckRateLimit,
+  recordFailedLogin as dbRecordFailedLogin,
+  resetLoginAttempts as dbResetLoginAttempts,
   UserRecord,
 } from './db';
 
@@ -52,7 +52,7 @@ function hashToken(token: string): string {
 }
 
 // Token Creation: <sessionId>.<payloadBase64url>.<signature>
-export function createSessionToken(user: SafeUser): { token: string; expiresAt: number } {
+export async function createSessionToken(user: SafeUser): Promise<{ token: string; expiresAt: number }> {
   const sessionId = crypto.randomBytes(24).toString('base64url');
   const expiresAt = Date.now() + SESSION_EXPIRY_MS;
   const payload = JSON.stringify({
@@ -70,7 +70,7 @@ export function createSessionToken(user: SafeUser): { token: string; expiresAt: 
   const token = `${sessionId}.${payloadB64}.${signature}`;
 
   // Persist session to database
-  insertSession({
+  await insertSession({
     id: sessionId,
     userId: user.id,
     tokenHash: hashToken(token),
@@ -82,7 +82,7 @@ export function createSessionToken(user: SafeUser): { token: string; expiresAt: 
 }
 
 // Token Verification: Cryptographic HMAC check + Database active session check
-export function verifySessionToken(token: string): SafeUser | null {
+export async function verifySessionToken(token: string): Promise<SafeUser | null> {
   if (!token || typeof token !== 'string') return null;
 
   const parts = token.split('.');
@@ -120,13 +120,13 @@ export function verifySessionToken(token: string): SafeUser | null {
   }
 
   // 3. Verify session exists in persistent DB
-  const session = findSession(hashToken(token));
+  const session = await findSession(hashToken(token));
   if (!session || session.userId !== payload.uid) {
     return null;
   }
 
   // 4. Retrieve user record
-  const user = findUserById(payload.uid);
+  const user = await findUserById(payload.uid);
   if (!user) return null;
 
   return {
@@ -138,45 +138,27 @@ export function verifySessionToken(token: string): SafeUser | null {
 }
 
 // Destroy session (Logout)
-export function invalidateSession(token: string): void {
+export async function invalidateSession(token: string): Promise<void> {
   if (!token) return;
-  deleteSessionByHash(hashToken(token));
+  await deleteSessionByHash(hashToken(token));
 }
 
 // Helper to extract authenticated user strictly from server cookie
-export function getUserFromRequest(req: NextRequest): SafeUser | null {
+export async function getUserFromRequest(req: NextRequest): Promise<SafeUser | null> {
   const cookie = req.cookies.get('lifecalc_auth_session')?.value;
   if (!cookie) return null;
   return verifySessionToken(cookie);
 }
 
 // Persistent shared rate limiter for multi-process brute force defense
-export function checkLoginRateLimit(key: string): { allowed: boolean; waitSeconds?: number } {
-  const now = Date.now();
-  const record = getRateLimitRecord(key);
-
-  if (record && record.lockUntil > now) {
-    const waitSeconds = Math.ceil((record.lockUntil - now) / 1000);
-    return { allowed: false, waitSeconds };
-  }
-
-  return { allowed: true };
+export async function checkLoginRateLimit(key: string): Promise<{ allowed: boolean; waitSeconds?: number }> {
+  return dbCheckRateLimit(key);
 }
 
-export function recordFailedLogin(key: string): void {
-  const now = Date.now();
-  const record = getRateLimitRecord(key) || { attempts: 0, lockUntil: 0 };
-  const newAttempts = record.attempts + 1;
-  let lockUntil = record.lockUntil;
-
-  // Lock out for 15 minutes after 5 failed attempts
-  if (newAttempts >= 5) {
-    lockUntil = now + 15 * 60 * 1000;
-  }
-
-  updateRateLimitRecord(key, newAttempts, lockUntil);
+export async function recordFailedLogin(key: string): Promise<void> {
+  return dbRecordFailedLogin(key);
 }
 
-export function resetLoginAttempts(key: string): void {
-  clearRateLimitRecord(key);
+export async function resetLoginAttempts(key: string): Promise<void> {
+  return dbResetLoginAttempts(key);
 }

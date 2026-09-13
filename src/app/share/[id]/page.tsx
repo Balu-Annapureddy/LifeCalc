@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { registry } from '@/engine/registry';
@@ -13,8 +13,8 @@ interface SharePageProps {
   searchParams?: Record<string, string>;
 }
 
-export default function SharePage({ params, searchParams }: SharePageProps) {
-  const shared = getSharedCalculation(params.id);
+export default async function SharePage({ params, searchParams }: SharePageProps) {
+  const shared = await getSharedCalculation(params.id);
   const calculatorId = shared?.calculatorId || searchParams?.calc || 'emi';
   const calc = registry.getById(calculatorId) || registry.getAll()[0];
 

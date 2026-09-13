@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { registry } from '@/engine/registry';
 import { getUserFromRequest } from '@/lib/auth';
 import { getOrCreateGuestId } from '@/lib/guest';
-import { getGuestQuota, incrementGuestQuota } from '@/lib/db';
+import { getGuestQuota, incrementGuestQuotaAtomic } from '@/lib/db';
 
 const GUEST_MAX_CALCULATIONS = 15;
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     const result = calc.calculate(validation.data);
 
     // 3. Server-side Authentication Verification
-    const authenticatedUser = getUserFromRequest(req);
+    const authenticatedUser = await getUserFromRequest(req);
 
     if (authenticatedUser) {
       return NextResponse.json({
@@ -49,18 +49,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 4. Authoritative Persistent Guest Quota Tracking
+    // 4. Authoritative Persistent Guest Quota Tracking (Single Atomic Operation)
     const { guestId, signedCookie, isNew } = getOrCreateGuestId(req);
-    const currentCount = getGuestQuota(guestId);
 
-    // 15th calculation works and is displayed; 16th calculation attempt is blocked with 429
-    if (currentCount >= GUEST_MAX_CALCULATIONS) {
+    const { allowed, count: newCount } = await incrementGuestQuotaAtomic(guestId, GUEST_MAX_CALCULATIONS);
+
+    // If calculation limit exceeded, block request with HTTP 429
+    if (!allowed) {
       const blockedResponse = NextResponse.json(
         {
           error: 'Guest calculation limit reached',
           message: "You've used your 15 free calculations. Sign in for unlimited free calculations and save your progress.",
           isGuest: true,
-          calculationsUsed: currentCount,
+          calculationsUsed: newCount,
           calculationsRemaining: 0,
           quotaReached: true,
         },
@@ -78,8 +79,6 @@ export async function POST(req: NextRequest) {
       return blockedResponse;
     }
 
-    // Increment persistent quota
-    const { count: newCount } = incrementGuestQuota(guestId);
     const calculationsRemaining = Math.max(0, GUEST_MAX_CALCULATIONS - newCount);
     const quotaReached = newCount >= GUEST_MAX_CALCULATIONS;
 
@@ -113,7 +112,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   // Query current guest quota status without incrementing count
-  const authenticatedUser = getUserFromRequest(req);
+  const authenticatedUser = await getUserFromRequest(req);
 
   if (authenticatedUser) {
     return NextResponse.json({
@@ -125,7 +124,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { guestId, signedCookie, isNew } = getOrCreateGuestId(req);
-  const count = getGuestQuota(guestId);
+  const count = await getGuestQuota(guestId);
   const remaining = Math.max(0, GUEST_MAX_CALCULATIONS - count);
 
   const res = NextResponse.json({

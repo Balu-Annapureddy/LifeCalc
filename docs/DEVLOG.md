@@ -203,3 +203,24 @@
 - `npm test`: 52 passed across 6 test suites (100% pass rate).
 - `npm run build`: Compiled with 42 static & dynamic routes.
 - `npm run test:e2e`: 4/4 Playwright browser tests passed in Chromium.
+
+## [Entry 007] — 2026-09-13: Production Database Integration (Supabase/Postgres, Atomic Functions, & Concurrency Invariants)
+
+### What Was Implemented & Verified
+1. **Production Database Integration (`src/lib/db.ts`, `src/lib/supabase.ts`)**:
+   - Integrated full Postgres / Supabase database client utilizing the administrative Service Role Key (`SUPABASE_SERVICE_ROLE_KEY`) safely strictly in server-side execution (`src/lib/supabase.ts`), with an explicit runtime guard preventing client-bundle contamination.
+   - Added explicit persistence mode via `DATABASE_MODE` ('supabase' vs 'local').
+   - In production (`NODE_ENV === 'production'`), the application enforces `DATABASE_MODE=supabase` and fails closed immediately if `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` is missing. Zero silent fallback to local JSON in production.
+2. **Authoritative Atomic Guest Quota Invariant (`src/lib/db.ts`, `data/schema.sql`, `src/tests/quota-concurrency.test.ts`)**:
+   - Replaced multi-step read-then-write quota increments with a single atomic operation `incrementGuestQuotaAtomic`.
+   - In Supabase, invokes stored procedure `increment_guest_quota(p_guest_id, p_max_allowed)` or atomic SQL upsert.
+   - In local/test mode, executes under atomic process lock `lifecalc.lock`.
+   - Verified with an automated concurrency test: starting at quota 14, 10 simultaneous concurrent requests yield exactly 1 allowed calculation and 9 rejections, with the final quota strictly capped at 15.
+3. **Row Level Security (RLS) & Authorization Invariants (`data/schema.sql`, `src/lib/db.ts`)**:
+   - Configured explicit RLS policies for `history`, `saved_scenarios`, and `shared_calculations`.
+   - All user data operations enforce strict server-side owner validation (`user_id`). IDOR deletion and access attempts are completely prevented and verified via automated regression tests.
+4. **Asynchronous Datastore Transition Across APIs**:
+   - Migrated all route handlers (`/api/calculate`, `/api/auth/*`, `/api/history`, `/api/saved`, `/api/share`, and `/share/[id]`) to asynchronous database access patterns.
+5. **Updated Testing & CI (`src/tests/quota-concurrency.test.ts`, `.github/workflows/ci.yml`, `playwright.config.ts`)**:
+   - Vitest suite increased to 53 tests across 7 test files (100% pass rate).
+   - Playwright browser E2E tests passing 4/4 against production build.

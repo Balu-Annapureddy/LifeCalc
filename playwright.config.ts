@@ -26,6 +26,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
     env: {
+      DATABASE_MODE: 'local',
       SESSION_SECRET: 'test_lifecalc_secure_production_hmac_secret_2026_entropy_key_32chars',
       GUEST_QUOTA_SECRET: 'test_lifecalc_secure_guest_quota_salt_key_2026_entropy_32chars',
     },

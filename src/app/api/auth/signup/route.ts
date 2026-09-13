@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { findUserByEmail, insertUser } from '@/lib/db';
 import { hashPassword, createSessionToken, SafeUser } from '@/lib/auth';
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const existing = findUserByEmail(normalizedEmail);
+    const existing = await findUserByEmail(normalizedEmail);
     if (existing) {
       return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
     }
@@ -31,13 +31,13 @@ export async function POST(req: NextRequest) {
       createdAt: Date.now(),
     };
 
-    insertUser({
+    await insertUser({
       ...safeUser,
       passwordHash: hash,
       salt,
     });
 
-    const { token, expiresAt } = createSessionToken(safeUser);
+    const { token, expiresAt } = await createSessionToken(safeUser);
 
     const res = NextResponse.json({
       success: true,

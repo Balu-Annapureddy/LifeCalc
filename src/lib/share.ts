@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+﻿import crypto from 'crypto';
 import { registry } from '@/engine/registry';
 import { getSharedCalculationById, insertSharedCalculation, SharedCalculationRecord } from './db';
 
@@ -9,7 +9,7 @@ export interface VerifiedSharedCalculation {
   createdAt: number;
 }
 
-export function saveSharedCalculation(calculatorId: string, inputs: Record<string, any>): string {
+export async function saveSharedCalculation(calculatorId: string, inputs: Record<string, any>): Promise<string> {
   const calc = registry.getById(calculatorId);
   if (!calc) {
     throw new Error(`Invalid calculatorId: ${calculatorId}`);
@@ -23,11 +23,11 @@ export function saveSharedCalculation(calculatorId: string, inputs: Record<strin
 
   // 128 bits of cryptographic unpredictability
   const shareId = crypto.randomBytes(16).toString('hex');
-  insertSharedCalculation(shareId, calculatorId, validation.data);
+  await insertSharedCalculation(shareId, calculatorId, validation.data);
   return shareId;
 }
 
-export function getSharedCalculation(id: string): VerifiedSharedCalculation | null {
+export async function getSharedCalculation(id: string): Promise<VerifiedSharedCalculation | null> {
   if (!id || typeof id !== 'string' || !/^[a-fA-F0-9]{32}$/.test(id)) {
     // Also accept shorter test/legacy IDs if well-formed
     if (!/^[a-zA-Z0-9_-]{6,64}$/.test(id)) {
@@ -35,7 +35,7 @@ export function getSharedCalculation(id: string): VerifiedSharedCalculation | nu
     }
   }
 
-  const record = getSharedCalculationById(id);
+  const record = await getSharedCalculationById(id);
   if (!record) return null;
 
   // Validate calculator still exists

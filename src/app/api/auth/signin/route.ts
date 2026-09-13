@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { findUserByEmail } from '@/lib/db';
 import {
   verifyPassword,
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check rate limit for brute-force protection
-    const rateLimit = checkLoginRateLimit(normalizedEmail);
+    const rateLimit = await checkLoginRateLimit(normalizedEmail);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: `Too many failed attempts. Please try again in ${rateLimit.waitSeconds} seconds.` },
@@ -28,21 +28,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = findUserByEmail(normalizedEmail);
+    const user = await findUserByEmail(normalizedEmail);
     // Strict security: Unknown users must return 401, NEVER auto-provision!
     if (!user) {
-      recordFailedLogin(normalizedEmail);
+      await recordFailedLogin(normalizedEmail);
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
     const isValid = verifyPassword(password, user.passwordHash, user.salt);
     if (!isValid) {
-      recordFailedLogin(normalizedEmail);
+      await recordFailedLogin(normalizedEmail);
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
     // Reset failed attempts on success
-    resetLoginAttempts(normalizedEmail);
+    await resetLoginAttempts(normalizedEmail);
 
     const safeUser: SafeUser = {
       id: user.id,
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       createdAt: user.createdAt,
     };
 
-    const { token, expiresAt } = createSessionToken(safeUser);
+    const { token, expiresAt } = await createSessionToken(safeUser);
 
     const res = NextResponse.json({
       success: true,
