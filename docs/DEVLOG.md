@@ -343,3 +343,61 @@ pm test (Vitest): 78/78 tests passing across 9 test suites (including newly adde
 pm run build: 47 static and dynamic Next.js routes compiled cleanly with 0 errors.
 - 
 pm run test:e2e (Playwright): 4/4 end-to-end browser tests passed in Chromium (unmetered Live Preview, auth flow, scenario persistence, and calculation sharing).
+
+---
+
+## [Entry 012] — 2026-09-13: Code Review Hardening Sprint
+
+### Context
+Independent code review of commit `2de51ed` surfaced one functional gap (quota not enforced — resolved by Entry 011 architectural decision to switch to unmetered Live Preview) and five genuine security issues. This entry records the remediation of all five security issues plus complementary hardening work.
+
+### Security Fixes
+
+#### 1. OAuth Pre-Hijack Vulnerability (CRITICAL)
+- **Problem**: An attacker could register with a victim's email (unverified), then when the victim later signs in via Google OAuth the attacker's existing session could capture the authenticated identity.
+- **Fix** (`src/app/api/auth/oauth/google/callback/route.ts`): On Google callback, if an unverified account already exists with the same email, all sessions for that account are invalidated, the attacker password is stripped, and `emailVerified` is set to `true`. The legitimate Google user then gets a clean, attacker-free session.
+
+#### 2. Signup Rate Limiting and Account Enumeration
+- **Problem**: `/api/auth/signup` had no rate limiting, allowing brute-force enumeration of registered emails.
+- **Fix** (`src/app/api/auth/signup/route.ts`): Added per-email rate limiting (`signup:<email>` key), payload size validation, and neutral response copy that does not confirm whether an email is registered.
+
+#### 3. Signin Timing Side-Channel
+- **Problem**: `/api/auth/signin` returned early (before running the hash comparison) for unknown emails, leaking via timing whether an email exists.
+- **Fix** (`src/app/api/auth/signin/route.ts`): Added a dummy `verifyPassword` call for unknown emails so the constant-time path is always executed.
+
+#### 4. Missing Security Headers
+- **Fix** (`next.config.js`): Added `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, and `X-XSS-Protection: 0`.
+
+#### 5. Share and History Payload Abuse
+- **Fix** (`src/app/api/share/route.ts`): Added IP-based rate limiting and 8 KB payload cap.
+- **Fix** (`src/app/api/history/route.ts`, `src/app/api/saved/route.ts`): Added payload size validation and per-field character caps for `summary`, `name`, `notes`, and `primaryValue`.
+
+### New Features and Pages
+
+#### Password Reset Flow (Complete)
+- `src/app/api/auth/forgot-password/route.ts`: Rate-limited token dispatch, anti-enumeration (always returns 200).
+- `src/app/api/auth/reset-password/route.ts`: Validates token expiry, hashes new password with scrypt, updates DB, invalidates all active sessions.
+- `src/app/(auth)/forgot-password/page.tsx`: Full UI for requesting a reset link.
+- `src/app/(auth)/reset-password/page.tsx`: Full UI for setting a new password with confirmation and visibility toggles.
+
+#### Terms of Service Page
+- `src/app/(marketing)/terms/page.tsx`: Resolves the footer 404 for the `/terms` link.
+
+### DB and Schema Updates
+- `src/lib/db.ts`: Added `resetToken`, `resetTokenExpiresAt` to `UserRecord`; added `findUserByResetToken`, `setUserResetToken`, `updateUserPassword`, `deleteSessionsByUserId`.
+- `data/schema.sql`: Added `reset_token`, `reset_token_expires_at`, `idx_users_reset_token`.
+- `src/lib/auth.ts`: Exported `invalidateAllUserSessions(userId)`.
+
+### Code Quality
+- `src/lib/guest.ts`: Extracted `attachGuestCookie(res, signedCookie, isNew)` helper; refactored `calculate/route.ts` and `saved/route.ts` to use it.
+- `src/components/layout/Header.tsx`: Re-fetches `/api/auth/me` on `usePathname()` change and on `lifecalc-auth-change` custom event. User greeting added to mobile drawer.
+
+### Tests
+- `src/tests/auth-verification.test.ts`: Expanded to 11 tests (tests 8-11 cover forgot-password dispatch, reset-password validation, token reuse rejection, and Google-only account collision handling).
+
+### Verification Status
+- npm run typecheck: 0 TypeScript errors.
+- npm test (Vitest): 82/82 tests passing across 9 test suites.
+- npm run build: 52 static and dynamic Next.js routes compiled cleanly with 0 errors.
+- npm run test:e2e (Playwright): 4/4 end-to-end browser tests passed in Chromium (incl. previously failing Journey 2 with signup, email verify screen, and header auth).
+- Commit: `0aacb1e` pushed to `origin/main`.
