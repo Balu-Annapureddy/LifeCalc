@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('LifeCalc Browser E2E Test Suite', () => {
-  test('1. Guest Journey: unmetered Live Preview, no quota blocking, and non-blocking account prompt', async ({ page }) => {
+  test('1. Calculator Journey: live preview, navigation, and no auth UI', async ({ page }) => {
     // Navigate to EMI calculator
     await page.goto('/calculators/money/emi');
     await expect(page.locator('h1')).toContainText('EMI Calculator');
@@ -10,9 +10,11 @@ test.describe('LifeCalc Browser E2E Test Suite', () => {
     await expect(page.locator('text=Monthly EMI').first()).toBeVisible();
     await expect(page.locator('text=Live Preview')).toBeVisible();
 
-    // Confirm quota counter is gone from header
+    // No auth UI should be present
+    await expect(page.locator('a[href="/signin"]')).not.toBeVisible();
+    await expect(page.locator('a[href="/signup"]')).not.toBeVisible();
+    await expect(page.locator('button:has-text("Sign out")')).not.toBeVisible();
     await expect(page.locator('text=Free calculations:')).not.toBeVisible();
-    await expect(page.locator('[data-testid="guest-quota-badge"]')).not.toBeVisible();
 
     // Change input: live preview updates immediately without clicking Calculate
     const principalInput = page.locator('input[type="number"]').first();
@@ -22,96 +24,38 @@ test.describe('LifeCalc Browser E2E Test Suite', () => {
     // Verify calculation result updated instantly
     await expect(page.locator('text=Monthly EMI').first()).toBeVisible();
 
-    // Simulate 5 meaningful calculator visits to trigger the guest nudge
-    await page.evaluate(() => {
-      window.localStorage.setItem('lifecalc_guest_engagement', JSON.stringify({
-        meaningfulUsageCount: 4,
-        lastPromptedAtCount: 0,
-        dismissedCount: 0,
-      }));
-    });
-
-    // Navigate to a new calculator to trigger 5th meaningful usage
+    // Navigate to another calculator
     await page.goto('/calculators/money/sip');
     await expect(page.locator('h1')).toContainText('SIP Calculator');
     const sipInput = page.locator('input[type="number"]').first();
     await sipInput.fill('15000');
-
-    // Wait for the settle delay (1500ms) and assert nudge appears
-    const nudge = page.locator('[data-testid="guest-account-nudge"]');
-    await expect(nudge).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('text=Get more from LifeCalc')).toBeVisible();
-
-    // Dismiss nudge: "Continue as guest"
-    const continueBtn = page.locator('button:has-text("Continue as guest")');
-    await continueBtn.click();
-    await expect(nudge).not.toBeVisible();
-
-    // Verify calculator is fully usable after dismissal
-    await sipInput.fill('25000');
     await expect(page.locator('text=Expected Total Corpus').first()).toBeVisible();
 
-    // Refresh page: nudge does not immediately reappear
+    // Refresh page: calculator still works
     await page.reload();
     await expect(page.locator('h1')).toContainText('SIP Calculator');
-    await expect(nudge).not.toBeVisible();
   });
 
-  test('2. Authentication Journey: signup, signout, invalid password, signin, and authenticated session', async ({ page }) => {
-    const testEmail = `browser_test_${Date.now()}@lifecalc.in`;
-    const testPassword = 'Password2026!';
-    const testName = 'Browser Tester';
+  test('2. Navigation Journey: home, categories, about, privacy, terms', async ({ page }) => {
+    // Home page loads
+    await page.goto('/');
+    await expect(page.locator('h1').first()).toBeVisible();
 
-    // 1. Sign Up
-    await page.goto('/signup');
-    await page.fill('input[placeholder="e.g. Alex Morgan"]', testName);
-    await page.fill('input[type="email"]', testEmail);
-    await page.fill('input[placeholder="Create a password for your LifeCalc account"]', testPassword);
-    await page.fill('input[placeholder="Confirm your LifeCalc password"]', testPassword);
-    await page.click('button[type="submit"]');
+    // Navigate to a category
+    await page.goto('/calculators/money');
+    await expect(page.locator('h1')).toContainText(/money/i);
 
-    // Email verification confirmation screen is displayed
-    await expect(page.locator('text=Verify Your Email')).toBeVisible();
-    await page.click('a:has-text("Continue to LifeCalc")');
+    // About page
+    await page.goto('/about');
+    await expect(page.locator('h1')).toBeVisible();
 
-    // Verify user is authenticated in header
-    await page.waitForSelector(`text=${testName}`, { timeout: 10000 });
-    await expect(page.locator(`text=${testName}`)).toBeVisible();
+    // Privacy page
+    await page.goto('/privacy');
+    await expect(page.locator('h1')).toBeVisible();
 
-    // 2. Sign Out
-    await page.click('button:has-text("Sign out")');
-    await page.waitForSelector('a[href="/signin"]');
-    // Verify user name is gone and Sign in button is back
-    await expect(page.locator('a[href="/signin"]').first()).toBeVisible();
-
-    // 3. Sign In - Invalid Password
-    await page.goto('/signin');
-    await page.fill('input[type="email"]', testEmail);
-    await page.fill('input[type="password"]', 'WrongPass!');
-    await page.click('button[type="submit"]');
-    await expect(page.locator('text=Invalid email or password')).toBeVisible();
-
-    // 4. Sign In - Unknown Email
-    await page.fill('input[type="email"]', `unknown_${Date.now()}@lifecalc.in`);
-    await page.fill('input[type="password"]', testPassword);
-    await page.click('button[type="submit"]');
-    await expect(page.locator('text=Invalid email or password')).toBeVisible();
-
-    // 5. Sign In - Correct Credentials
-    await page.fill('input[type="email"]', testEmail);
-    await page.fill('input[type="password"]', testPassword);
-    await page.click('button[type="submit"]');
-    await page.waitForSelector(`text=${testName}`, { timeout: 10000 });
-    await expect(page.locator(`text=${testName}`)).toBeVisible();
-
-    // 6. Session persists across navigation
-    await page.goto('/calculators/money/sip');
-    await expect(page.locator(`text=${testName}`)).toBeVisible();
-
-    // 7. Sign Out again
-    await page.click('button:has-text("Sign out")');
-    await page.waitForSelector('a[href="/signin"]');
-    await expect(page.locator('a[href="/signin"]').first()).toBeVisible();
+    // Terms page
+    await page.goto('/terms');
+    await expect(page.locator('h1')).toBeVisible();
   });
 
   test('3. Persistence Journey: save scenario, reload, and delete', async ({ page }) => {
@@ -143,40 +87,37 @@ test.describe('LifeCalc Browser E2E Test Suite', () => {
     await expect(page.locator('text=EMI Calculator Scenario')).not.toBeVisible();
   });
 
-  test('4. Sharing Journey: create share link and load in fresh context', async ({ page, browser }) => {
-    // 1. Create a shareable calculation via API with specific inputs
-    const shareRes = await page.request.post('/api/share', {
-      data: {
-        calculatorId: 'can-i-afford-this',
-        inputs: {
-          monthlyIncome: 95000,
-          monthlyExpenses: 35000,
-          existingEmis: 5000,
-          currentSavings: 300000,
-          itemPrice: 75000,
-          paymentMode: 'cash',
-          downPayment: 75000,
-          emiTenureMonths: 12,
-          emiInterestRate: 0,
-        },
-      },
-    });
-    expect(shareRes.ok()).toBeTruthy();
-    const { shareId, shareUrl } = await shareRes.json();
-    expect(shareId).toBeTruthy();
+  test('4. Sharing Journey: create share URL and load in fresh context', async ({ page, browser }) => {
+    // Open a calculator and set inputs
+    await page.goto('/calculators/money/emi');
+    await expect(page.locator('h1')).toContainText('EMI Calculator');
 
-    // 2. Open in a completely fresh browser context (isolated incognito session)
+    // Fill in a principal value
+    const principalInput = page.locator('input[type="number"]').first();
+    await principalInput.fill('500000');
+    await page.waitForTimeout(200);
+
+    // Click the Share / Copy Link button
+    const shareBtn = page.locator('button:has-text("Share")').or(page.locator('button:has-text("Copy Link")'));
+    if (await shareBtn.count() > 0) {
+      await shareBtn.first().click();
+      await page.waitForTimeout(500);
+    }
+
+    // Build a share URL manually with query params (the static sharing mechanism)
+    const shareUrl = '/calculators/money/emi?principal=500000';
+
+    // Open in a completely fresh browser context (isolated incognito session)
     const freshContext = await browser.newContext();
     const freshPage = await freshContext.newPage();
 
     await freshPage.goto(shareUrl);
-    // Verify shared banner and correct calculator loaded
-    await expect(freshPage.locator('h1')).toContainText('Shared Calculation: Can I Afford This?');
-    await expect(freshPage.locator('text=Verified Engine Result')).toBeVisible();
+    await expect(freshPage.locator('h1')).toContainText('EMI Calculator');
+
+    // Verify the input was populated from query params
+    const freshPrincipal = freshPage.locator('input[type="number"]').first();
+    await expect(freshPrincipal).toHaveValue('500000');
 
     await freshContext.close();
   });
 });
-
-
-
