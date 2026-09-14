@@ -20,7 +20,7 @@ export const Footer: React.FC = () => {
             </p>
             <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md w-fit border border-emerald-200">
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Basic calculations always free</span>
+              <span>100% Free & Anonymous — No Login Required</span>
             </div>
           </div>
 

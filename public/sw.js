@@ -1,16 +1,12 @@
-// LifeCalc Service Worker — Production-Safe Caching Strategy
+// LifeCalc Service Worker — Static Architecture Caching Strategy
 //
 // Caching tiers:
-//   1. API routes          → Network Only (never cached)
-//   2. /_next/static/      → Cache First  (content-hashed, immutable)
-//   3. HTML navigation     → Network First (always fresh when online; cached for offline fallback)
-//   4. Other static assets → Network First with cache fallback
+//   1. /_next/static/      → Cache First  (content-hashed, immutable)
+//   2. HTML navigation     → Network First (always fresh when online; cached for offline fallback)
+//   3. Other static assets → Network First with cache fallback
 //
 // CACHE_VERSION must be updated with each deployment that changes the app shell.
-// It is embedded at build time via the sw.js source itself.
-// Changing this string causes the browser to install a new SW and the activate
-// handler to evict all caches from previous versions.
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const STATIC_CACHE  = `lifecalc-static-${CACHE_VERSION}`;  // for /_next/static/ immutable assets
 const NAV_CACHE     = `lifecalc-nav-${CACHE_VERSION}`;     // for HTML navigation fallback
 
@@ -54,11 +50,9 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  // ── Tier 1: API routes — Network Only ──────────────────────────────────
-  // Never cache API responses; always go to the network.
-  // This includes auth endpoints, OAuth, session checks, etc.
+  // Defensive guard: never intercept API requests if ever introduced
   if (url.pathname.startsWith('/api/')) {
-    return; // Let the browser handle it natively (no respondWith)
+    return;
   }
 
   // ── Tier 2: Immutable static assets — Cache First ──────────────────────

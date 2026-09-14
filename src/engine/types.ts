@@ -21,7 +21,8 @@ export type InputFieldType =
   | 'select'
   | 'radio'
   | 'date'
-  | 'slider';
+  | 'slider'
+  | 'boolean';
 
 export interface SelectOption {
   label: string;

@@ -2,62 +2,32 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Clock, Calculator, ArrowRight, Trash2, Bookmark, ExternalLink } from 'lucide-react';
+import { Clock, Trash2, ExternalLink, ShieldCheck } from 'lucide-react';
 import { registry } from '@/engine/registry';
-
-interface HistoryEntry {
-  id: string;
-  calculatorId: string;
-  summary: string;
-  primaryValue: string;
-  timestamp: string;
-  inputs: Record<string, any>;
-}
+import {
+  CalculationHistoryItem,
+  getCalculationHistory,
+  clearCalculationHistory,
+  deleteHistoryItem,
+} from '@/lib/storage';
 
 export default function HistoryPage() {
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [history, setHistory] = useState<CalculationHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/history')
-      .then(res => res.json())
-      .then(data => {
-        if (data.items) {
-          setHistory(data.items);
-        } else {
-          // fallback to localStorage
-          const local = localStorage.getItem('lifecalc_history');
-          if (local) {
-            try { setHistory(JSON.parse(local)); } catch {}
-          }
-        }
-      })
-      .catch(() => {
-        const local = localStorage.getItem('lifecalc_history');
-        if (local) {
-          try { setHistory(JSON.parse(local)); } catch {}
-        }
-      })
-      .finally(() => setLoading(false));
+    setHistory(getCalculationHistory());
+    setLoading(false);
   }, []);
 
-  const handleDelete = async (id: string) => {
-    setHistory(prev => {
-      const updated = prev.filter(item => item.id !== id);
-      try { localStorage.setItem('lifecalc_history', JSON.stringify(updated)); } catch {}
-      return updated;
-    });
-    try {
-      await fetch(`/api/history?id=${id}`, { method: 'DELETE' });
-    } catch {}
+  const handleDelete = (id: string) => {
+    deleteHistoryItem(id);
+    setHistory(getCalculationHistory());
   };
 
-  const handleClearAll = async () => {
+  const handleClearAll = () => {
+    clearCalculationHistory();
     setHistory([]);
-    try { localStorage.removeItem('lifecalc_history'); } catch {}
-    try {
-      await fetch('/api/history', { method: 'DELETE' });
-    } catch {}
   };
 
   return (
@@ -69,7 +39,7 @@ export default function HistoryPage() {
             Calculation History
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Review and reopen your recent calculation scenarios.
+            Review and reopen your recent calculation scenarios. Stored privately in your browser.
           </p>
         </div>
 
@@ -104,7 +74,11 @@ export default function HistoryPage() {
           {history.map(item => {
             const calc = registry.getById(item.calculatorId);
             const params = new URLSearchParams();
-            Object.entries(item.inputs).forEach(([k, v]) => params.set(k, String(v)));
+            Object.entries(item.inputs).forEach(([k, v]) => {
+              if (v !== undefined && v !== null) {
+                params.set(k, String(v));
+              }
+            });
             const reopenUrl = calc
               ? `/calculators/${calc.category}/${calc.slug}?${params.toString()}`
               : '#';

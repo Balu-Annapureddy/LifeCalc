@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
@@ -24,8 +24,7 @@ import {
 import { formatCurrency } from '@/engine/formatters';
 
 import { registry } from '@/engine/registry';
-import { GuestAccountNudge } from './GuestAccountNudge';
-import { recordMeaningfulUsage, dismissAccountPrompt } from '@/lib/guestUsage';
+import { saveScenario, addCalculationHistory } from '@/lib/storage';
 
 interface CalculatorRunnerProps {
   calculatorId: string;
@@ -56,22 +55,30 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
   const [copiedShare, setCopiedShare] = useState(false);
   const [showTable, setShowTable] = useState(false);
 
-  // Guest Account Nudge state
-  const [showNudge, setShowNudge] = useState(false);
-  const [usageCount, setUsageCount] = useState(0);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Check auth status on mount
+  // Hydrate inputs from URL query parameters on client mount
   React.useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (data.authenticated) {
-          setIsAuthenticated(true);
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const hydratedInputs: Record<string, any> = {};
+    let hasMatchingParam = false;
+    calculator.inputs.forEach(input => {
+      if (urlParams.has(input.id)) {
+        const raw = urlParams.get(input.id);
+        if (input.type === 'number') {
+          const num = Number(raw);
+          if (!isNaN(num)) hydratedInputs[input.id] = num;
+        } else if (input.type === 'boolean') {
+          hydratedInputs[input.id] = raw === 'true';
+        } else {
+          hydratedInputs[input.id] = raw;
         }
-      })
-      .catch(() => {});
-  }, []);
+        hasMatchingParam = true;
+      }
+    });
+    if (hasMatchingParam) {
+      setInputs(prev => ({ ...prev, ...hydratedInputs }));
+    }
+  }, [calculator]);
 
   // Authoritative calculation execution
   const currentResult: CalculatorResult = useMemo(() => {
@@ -86,21 +93,21 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
     }
   }, [calculator, inputs, defaultValues]);
 
-  // Track meaningful calculator engagement (settled interaction on valid result)
+  // Record calculation in browser-local history on settled interaction
   React.useEffect(() => {
-    if (isAuthenticated) return;
     const timer = setTimeout(() => {
-      if (currentResult && currentResult.primary && currentResult.primary.value !== undefined) {
-        const { shouldPrompt, currentCount } = recordMeaningfulUsage(calculator.id, isAuthenticated);
-        setUsageCount(currentCount);
-        if (shouldPrompt) {
-          setShowNudge(true);
-        }
+      if (currentResult?.primary?.formattedValue) {
+        addCalculationHistory({
+          calculatorId: calculator.id,
+          summary: currentResult.summaryExplanation || `${calculator.name} calculation`,
+          primaryValue: currentResult.primary.formattedValue,
+          inputs,
+        });
       }
-    }, 600);
+    }, 800);
 
     return () => clearTimeout(timer);
-  }, [inputs, calculator.id, currentResult, isAuthenticated]);
+  }, [inputs, calculator.id, calculator.name, currentResult]);
 
   const handleInputChange = (id: string, value: any) => {
     setInputs(prev => ({ ...prev, [id]: value }));
@@ -114,63 +121,37 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
 
   const handleShare = async () => {
     if (typeof window !== 'undefined') {
-      try {
-        const res = await fetch('/api/share', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            calculatorId: calculator.id,
-            inputs,
-          }),
-        });
-        const data = await res.json();
-        if (data.shareUrl) {
-          const fullUrl = `${window.location.origin}${data.shareUrl}`;
-          await navigator.clipboard.writeText(fullUrl);
-          setCopiedShare(true);
-          setTimeout(() => setCopiedShare(false), 2500);
-          return;
-        }
-      } catch {}
-
-      // Fallback: encode query parameters
       const params = new URLSearchParams();
-      Object.entries(inputs).forEach(([k, v]) => params.set(k, String(v)));
+      Object.entries(inputs).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          params.set(k, String(v));
+        }
+      });
       const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-      navigator.clipboard.writeText(url);
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       setCopiedShare(true);
       setTimeout(() => setCopiedShare(false), 2500);
     }
   };
 
-  const handleSaveScenario = async () => {
+  const handleSaveScenario = () => {
     try {
-      const payload = {
+      saveScenario({
         name: `${calculator.name} Scenario`,
         calculatorId: calculator.id,
         primaryResult: currentResult.primary.formattedValue,
         notes: currentResult.summaryExplanation,
         inputs,
-      };
-
-      // Save to server API
-      await fetch('/api/saved', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
       });
-
-      // Save to localStorage as backup
-      const existing = JSON.parse(localStorage.getItem('lifecalc_saved') || '[]');
-      localStorage.setItem('lifecalc_saved', JSON.stringify([
-        {
-          id: `save_${Date.now()}`,
-          ...payload,
-          updatedAt: 'Just now',
-        },
-        ...existing,
-      ]));
-
       setSavedScenario(true);
       setTimeout(() => setSavedScenario(false), 2500);
     } catch {}
@@ -454,16 +435,6 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
         </section>
       )}
 
-      {/* Guest Account Nudge */}
-      {showNudge && (
-        <GuestAccountNudge
-          usageCount={usageCount}
-          onDismiss={() => {
-            setShowNudge(false);
-            dismissAccountPrompt();
-          }}
-        />
-      )}
 
       {/* Related Calculators (Requirement 24) */}
       {relatedCalculators.length > 0 && (

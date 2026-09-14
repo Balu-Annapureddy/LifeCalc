@@ -1,62 +1,27 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bookmark, ExternalLink, Trash2, Edit3, Plus, ShieldCheck } from 'lucide-react';
+import { Bookmark, ExternalLink, Trash2, ShieldCheck } from 'lucide-react';
 import { registry } from '@/engine/registry';
-
-interface SavedScenario {
-  id: string;
-  name: string;
-  calculatorId: string;
-  primaryResult: string;
-  notes?: string;
-  updatedAt: string;
-  inputs: Record<string, any>;
-}
+import {
+  SavedScenario,
+  getSavedScenarios,
+  deleteSavedScenario,
+} from '@/lib/storage';
 
 export default function SavedPage() {
   const [savedList, setSavedList] = useState<SavedScenario[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Read local cache immediately
-    const local = typeof window !== 'undefined' ? localStorage.getItem('lifecalc_saved') : null;
-    let localItems: SavedScenario[] = [];
-    if (local) {
-      try {
-        localItems = JSON.parse(local);
-        if (Array.isArray(localItems) && localItems.length > 0) {
-          setSavedList(localItems);
-        }
-      } catch {}
-    }
-
-    // 2. Fetch server records and merge with local items
-    fetch('/api/saved')
-      .then(res => res.json())
-      .then(data => {
-        if (data.items && Array.isArray(data.items)) {
-          if (data.items.length > 0) {
-            setSavedList(data.items);
-          } else if (localItems.length === 0) {
-            setSavedList([]);
-          }
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    setSavedList(getSavedScenarios());
+    setLoading(false);
   }, []);
 
-  const handleDelete = async (id: string) => {
-    setSavedList(prev => {
-      const updated = prev.filter(item => item.id !== id);
-      try { localStorage.setItem('lifecalc_saved', JSON.stringify(updated)); } catch {}
-      return updated;
-    });
-    try {
-      await fetch(`/api/saved?id=${id}`, { method: 'DELETE' });
-    } catch {}
+  const handleDelete = (id: string) => {
+    deleteSavedScenario(id);
+    setSavedList(getSavedScenarios());
   };
 
   return (
@@ -68,13 +33,13 @@ export default function SavedPage() {
             Saved Calculations & Scenarios
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Access your bookmarked financial models and decision plans.
+            Access your bookmarked financial models and decision plans. Stored privately in your browser.
           </p>
         </div>
 
         <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
           <ShieldCheck className="w-3.5 h-3.5" />
-          <span>Synced across devices</span>
+          <span>100% Private & Browser-Local</span>
         </div>
       </div>
 
@@ -97,63 +62,64 @@ export default function SavedPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {savedList.map(item => {
-          const calc = registry.getById(item.calculatorId);
-          const params = new URLSearchParams();
-          Object.entries(item.inputs).forEach(([k, v]) => params.set(k, String(v)));
-          const openUrl = calc
-            ? `/calculators/${calc.category}/${calc.slug}?${params.toString()}`
-            : '#';
+            const calc = registry.getById(item.calculatorId);
+            const params = new URLSearchParams();
+            Object.entries(item.inputs).forEach(([k, v]) => {
+              if (v !== undefined && v !== null) {
+                params.set(k, String(v));
+              }
+            });
+            const openUrl = calc
+              ? `/calculators/${calc.category}/${calc.slug}?${params.toString()}`
+              : '#';
 
-          return (
-            <div
-              key={item.id}
-              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:border-blue-300 transition-all flex flex-col justify-between space-y-4"
-            >
-              <div className="space-y-2">
-                <div className="flex items-start justify-between">
-                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded">
-                    {calc?.name || item.calculatorId}
-                  </span>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="text-slate-400 hover:text-rose-600 p-1"
-                    title="Remove saved calculation"
+            return (
+              <div
+                key={item.id}
+                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:border-blue-300 transition-all flex flex-col justify-between space-y-4"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between">
+                    <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded">
+                      {calc?.name || item.calculatorId}
+                    </span>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      className="text-slate-400 hover:text-rose-600 p-1"
+                      title="Remove saved calculation"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <h3 className="font-bold text-base text-slate-900 leading-snug">
+                    {item.name}
+                  </h3>
+
+                  <div className="text-lg font-extrabold text-slate-900 font-mono">
+                    {item.primaryResult}
+                  </div>
+
+                  {item.notes && (
+                    <p className="text-xs text-slate-500 line-clamp-2">{item.notes}</p>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-[11px] text-slate-400">Saved {item.updatedAt}</span>
+                  <Link
+                    href={openUrl}
+                    className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-700"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                    <span>Reopen Scenario</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </Link>
                 </div>
-
-                <h3 className="font-bold text-base text-slate-900 leading-snug">
-                  {item.name}
-                </h3>
-
-                <div className="text-lg font-extrabold text-slate-900 font-mono">
-                  {item.primaryResult}
-                </div>
-
-                {item.notes && (
-                  <p className="text-xs text-slate-500 line-clamp-2">{item.notes}</p>
-                )}
               </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-[11px] text-slate-400">Saved {item.updatedAt}</span>
-                <Link
-                  href={openUrl}
-                  className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-700"
-                >
-                  <span>Reopen Scenario</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
-
-
-

@@ -13,7 +13,6 @@ interface PageProps {
     category: string;
     slug: string;
   };
-  searchParams?: Record<string, string>;
 }
 
 export async function generateStaticParams() {
@@ -44,7 +43,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default function CalculatorPage({ params, searchParams }: PageProps) {
+export default function CalculatorPage({ params }: PageProps) {
   const calc = registry.getBySlug(params.slug);
   if (!calc || calc.category !== params.category) {
     notFound();
@@ -116,7 +115,6 @@ export default function CalculatorPage({ params, searchParams }: PageProps) {
       {/* Interactive Calculator Runner */}
       <CalculatorRunner
         calculatorId={calc.id}
-        initialInputs={searchParams}
       />
     </div>
   );
