@@ -44,7 +44,10 @@ export const CalculatorRunner: React.FC<CalculatorRunnerProps> = ({
   const defaultValues = useMemo(() => {
     const vals: Record<string, any> = {};
     calculator.inputs.forEach(input => {
-      vals[input.id] = initialInputs?.[input.id] !== undefined ? initialInputs[input.id] : input.defaultValue;
+      const resolvedDefault = typeof input.defaultValue === 'function' 
+        ? input.defaultValue() 
+        : input.defaultValue;
+      vals[input.id] = initialInputs?.[input.id] !== undefined ? initialInputs[input.id] : resolvedDefault;
     });
     return vals;
   }, [calculator, initialInputs]);
@@ -550,7 +553,7 @@ const InputField: React.FC<{
         <div className="relative">
           {input.type === 'currency' && (
             <span className="absolute left-3 top-2.5 text-sm font-semibold text-slate-400">
-              â‚¹
+              {'\u20B9'}
             </span>
           )}
           <input

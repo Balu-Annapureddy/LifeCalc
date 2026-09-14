@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
-import { AdSlot } from '@/components/ads/AdSlot';
+
 
 export const metadata: Metadata = {
   title: 'LifeCalc — Your numbers. Your decisions.',
@@ -35,19 +35,10 @@ export default function RootLayout({
       <body className="flex flex-col min-h-screen bg-slate-50 text-slate-900">
         <Header />
 
-        {/* 3-Column Desktop Side-Rail Container */}
-        <div className="flex-1 flex justify-center w-full max-w-[1680px] mx-auto px-2 sm:px-4">
-          {/* Left Side Rail Ad */}
-          <AdSlot slot="desktop_side_rail_left" />
-
-          {/* Main Application Content Area */}
-          <main className="flex-1 w-full max-w-5xl py-6 md:py-8 px-2 sm:px-6">
-            {children}
-          </main>
-
-          {/* Right Side Rail Ad */}
-          <AdSlot slot="desktop_side_rail_right" />
-        </div>
+        {/* Main Application Content Area */}
+        <main className="flex-1 w-full max-w-5xl mx-auto py-6 md:py-8 px-4 sm:px-6">
+          {children}
+        </main>
 
         <Footer />
         <script

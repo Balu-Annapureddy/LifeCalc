@@ -34,7 +34,7 @@ export interface InputDefinition {
   label: string;
   type: InputFieldType;
   description?: string;
-  defaultValue: any;
+  defaultValue: any | (() => any);
   placeholder?: string;
   min?: number;
   max?: number;

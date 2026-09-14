@@ -87,7 +87,7 @@ export const ageCalculator: CalculatorDefinition<AgeInput> = {
       id: 'targetDate',
       label: 'Age As Of Date',
       type: 'date',
-      defaultValue: new Date().toISOString().split('T')[0],
+      defaultValue: () => new Date().toISOString().split('T')[0],
       description: 'Usually today’s date.',
     },
   ],

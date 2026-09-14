@@ -8,10 +8,10 @@
 ## Architecture Principles
 
 1. **Deterministic Mathematics First**: All formulas (EMI, SIP, Compound Interest, CAGR, Indian CTC-to-in-hand, Attendance 75% thresholds) are pure, standalone functions with zero UI or database coupling.
-2. **Unmetered Live Previews & Meaningful Engagement**: Instant calculation results and dynamic charts update without paywalls or artificial calculation quotas. After sustained, meaningful exploration, guests receive a polite, non-blocking invitation to save scenarios and sync across devices.
-3. **100% Free Core Calculators**: Basic calculators remain free forever without artificial paywalls. Premium exists for ad-free experience, multi-year expense analytics, and AI explanation layers.
-4. **Desktop Side-Rail Ads with Zero Intrusion**: Clean, isolated `AdSlot` components placed strictly in side rails on desktop (>=1280px) and non-blocking inline slots on mobile. Automatically suppressed for premium members.
-5. **Progressive Web App (PWA)**: Multi-platform installability on Android, iOS, Windows, macOS, and Linux with offline support for deterministic calculators.
+2. **100% Free, Private & Anonymous**: No logins, no signups, no accounts, no server databases, and no tracking. All saved scenarios and calculation histories live safely and privately in your own browser's local storage.
+3. **Zero Ads**: Completely ad-free interface. No banner ads, no popups, no side-rails, and no third-party ad trackers.
+4. **Static Edge Architecture**: Optimized for instant loading as a static export hosted globally on Cloudflare Pages.
+5. **Progressive Web App (PWA)**: Multi-platform installability on Android, iOS, Windows, macOS, and Linux with full offline support for all calculators.
 
 ---
 
